@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:nali/services/nali_links.dart';
 import 'package:nali/services/settings_service.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/player_controller.dart';
@@ -216,10 +216,10 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen>
                       style: const TextStyle(color: Colors.white)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Share.share(t(
-                      'Escucha mi playlist "$_name" en Nali\npokke://playlist/$_playlistId',
-                      'Listen to my playlist "$_name" on Nali\npokke://playlist/$_playlistId',
-                    ));
+                    if (_playlistId.isNotEmpty) {
+                      NaliLinks.share('$_name', NaliLinks.playlist(_playlistId),
+                        description: t('Escucha mi playlist en Nali', 'Listen to my playlist on Nali'));
+                    }
                   },
                 ),
                 ListTile(
@@ -228,7 +228,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen>
                       style: const TextStyle(color: Colors.white)),
                   onTap: () {
                     Clipboard.setData(
-                        ClipboardData(text: 'pokke://playlist/$_playlistId'));
+                        ClipboardData(text: NaliLinks.playlist(_playlistId).toString()));
                     Navigator.pop(ctx);
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(t('Copiado', 'Copied'))),
