@@ -1,5 +1,11 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/supabase_service.dart';
+import 'package:nali/services/native_preferences_bridge.dart';
 import 'package:nali/services/notification_service.dart';
 import 'package:nali/services/audio_cache_service.dart';
 import 'package:nali/services/spotify_service.dart';
@@ -9,16 +15,40 @@ import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/screens/font_manager_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final String? category;
+  const SettingsScreen({super.key, this.category});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  bool _showListening = true;
+  bool _appleCanvas = false;
+  bool _spotifyCanvas = false;
+  bool _externalCanvas = true;
+  bool _canvasRepeat = true;
+  bool _animatedCovers = true;
+
   @override
   void initState() {
     super.initState();
+    SupabaseService.getProfile().then((profile) {
+      if (mounted && profile != null) setState(() {
+        _showListening = profile['show_listening'] != false;
+        SettingsService.instance.profilePublic = profile['is_public'] != false;
+      });
+    });
+    NativePreferencesBridge.instance.loadCanvasSettings().then((values) {
+      if (!mounted) return;
+      setState(() {
+        _appleCanvas = values['appleMusic'] ?? false;
+        _spotifyCanvas = values['spotify'] ?? false;
+        _externalCanvas = values['external'] ?? true;
+        _canvasRepeat = values['repeat'] ?? true;
+        _animatedCovers = values['animatedCovers'] ?? true;
+      });
+    }).catchError((error) => debugPrint('Canvas preferences: $error'));
     SpotifyService.instance.load().then((_) {
       if (mounted) setState(() {});
     });
@@ -221,15 +251,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return AnimatedBuilder(
       animation: s,
       builder: (context, _) {
+        if (widget.category == null) return _buildCategoryDashboard(s);
         return Scaffold(
           backgroundColor: s.amoled ? Colors.black : const Color(0xFF0C0C0E),
           appBar: AppBar(
-            title: Text(t('Ajustes', 'Settings')),
+            title: Text(_categoryTitle(widget.category!)),
             backgroundColor: Colors.transparent,
           ),
           body: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
             children: [
+              if (widget.category == 'appearance') ...[
               // ── IDIOMA ────────────────────────────────────────
               _section(t('Idioma', 'Language')),
               LiquidGlass(
@@ -342,7 +374,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FontManagerScreen())),
                 ),
               ),
-
+              _section(t('Fondo de Home', 'Home background')),
+              LiquidGlass(borderRadius: BorderRadius.circular(14), child: Column(children: [
+                if (!kIsWeb && s.homeBackgroundPath != null && File(s.homeBackgroundPath!).existsSync())
+                  ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(File(s.homeBackgroundPath!), height: 110, width: double.infinity, fit: BoxFit.cover)),
+                ListTile(leading: const Icon(Icons.wallpaper_rounded, color: Colors.white70), title: Text(t('Seleccionar imagen', 'Choose image'), style: const TextStyle(color: Colors.white)), onTap: _pickHomeBackground),
+                if (s.homeBackgroundPath != null)
+                  ListTile(leading: const Icon(Icons.delete_outline_rounded, color: Colors.white70), title: Text(t('Quitar fondo', 'Remove background'), style: const TextStyle(color: Colors.white)), onTap: _clearHomeBackground),
+              ])),
+              _incompleteNote(t('El modo oscuro sigue siendo el tema global actual. El modo claro global todavía requiere una migración visual de todas las pantallas.', 'Dark mode remains the current global theme. A global light theme still requires a visual migration of all screens.')),
+              ],
+              if (widget.category == 'playback') ...[
               // ── PLAYBACK ──────────────────────────────────────
               _section(t('Reproducción', 'Playback')),
               LiquidGlass(
@@ -384,6 +426,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
+                _section(t('Canvas y portadas animadas', 'Canvas and animated covers')),
+                if (NativePreferencesBridge.instance.supported) ...[
+                  LiquidGlass(borderRadius: BorderRadius.circular(14), child: Column(children: [
+                    _canvasSwitch('appleMusic', t('Canvas de Apple Music', 'Apple Music Canvas'), _appleCanvas),
+                    _canvasSwitch('spotify', t('Canvas de Spotify', 'Spotify Canvas'), _spotifyCanvas),
+                    _canvasSwitch('external', t('Fuentes externas', 'External sources'), _externalCanvas),
+                    _canvasSwitch('repeat', t('Repetir Canvas', 'Repeat Canvas'), _canvasRepeat),
+                    _canvasSwitch('animatedCovers', t('Portadas animadas BitChord', 'BitChord animated covers'), _animatedCovers),
+                  ])),
+                ] else
+                  _incompleteNote(t('Los Canvas nativos se controlan desde Android. En web e iOS se conserva el reproductor Flutter.', 'Native Canvas controls are Android-only. Web and iOS keep the Flutter player.')),
+              ],
+              if (widget.category == 'library') ...[
               // ── CACHE ─────────────────────────────────────────
               _section(t('Almacenamiento', 'Storage')),
               LiquidGlass(
@@ -454,6 +509,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
+              ],
+              if (widget.category == 'advanced') ...[
               // ── EDITORES ──────────────────────────────────────
               _section(t('Estudio', 'Studio')),
               Text(
@@ -494,6 +551,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _openPlaylistDefaults(),
               ),
 
+              ],
+              if (widget.category == 'account') ...[
               // ── ACCOUNT ───────────────────────────────────────
               _section(t('Cuenta', 'Account')),
               LiquidGlass(
@@ -518,9 +577,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const Icon(Icons.chevron_right, color: Colors.white38),
                       onTap: () => Navigator.pushNamed(context, '/admin'),
                     ),
+                    ListTile(
+                      leading: const Icon(Icons.email_outlined, color: Colors.white70),
+                      title: Text(SupabaseService.currentUser?.email ?? t('Sin sesión', 'Signed out'), style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(t('Correo de la cuenta actual', 'Current account email'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.lock_reset_rounded, color: Colors.white70),
+                      title: Text(t('¿Olvidaste tu contraseña?', 'Forgot your password?'), style: const TextStyle(color: Colors.white)),
+                      trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+                      onTap: _showPasswordRecovery,
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.logout_rounded, color: Color(0xffff7777)),
+                      title: Text(t('Cerrar sesión', 'Sign out'), style: const TextStyle(color: Color(0xffff7777))),
+                      onTap: _confirmSignOut,
+                    ),
                   ],
                 ),
               ),
+              _incompleteNote(t('La recuperación de contraseña y el cierre de sesión ya están conectados. Cambio entre varias cuentas y eliminación de cuenta siguen pendientes de un flujo seguro de backend.', 'Password recovery and sign-out are connected. Multi-account switching and account deletion still require a secure backend flow.')),
+              ],
+              if (widget.category == 'privacy') ...[
+                _section(t('Privacidad del perfil', 'Profile privacy')),
+                LiquidGlass(borderRadius: BorderRadius.circular(14), child: Column(children: [
+                  SwitchListTile(
+                    activeColor: const Color(0xfffc3c44),
+                    title: Text(t('Perfil público', 'Public profile'), style: const TextStyle(color: Colors.white)),
+                    subtitle: Text(t('Controla si tu perfil puede mostrarse públicamente.', 'Controls whether your profile can be viewed publicly.'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    value: s.profilePublic,
+                    onChanged: (value) async {
+                      final old = s.profilePublic;
+                      setState(() => s.profilePublic = value);
+                      try { await SupabaseService.updateProfileVisibility(value); await s.setFlag('priv_profile_public', value); }
+                      catch (error) { if (mounted) setState(() => s.profilePublic = old); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error'))); }
+                    },
+                  ),
+                  SwitchListTile(
+                    activeColor: const Color(0xfffc3c44),
+                    title: Text(t('Mostrar actividad musical', 'Show listening activity'), style: const TextStyle(color: Colors.white)),
+                    subtitle: Text(t('Permite mostrar la canción actual en tu perfil.', 'Allows your current track to appear on your profile.'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    value: _showListening, onChanged: _setListeningVisibility,
+                  ),
+                  SwitchListTile(
+                    activeColor: const Color(0xfffc3c44),
+                    title: Text(t('Historial local', 'Local listening history'), style: const TextStyle(color: Colors.white)),
+                    value: s.historyLocal, onChanged: (value) => s.setFlag('priv_history_local', value),
+                  ),
+                ])),
+                _incompleteNote(t('Los controles de ubicación y permisos sociales requieren todavía una integración de consentimiento; no se comparte ubicación desde esta pantalla.', 'Location and social-consent controls still need integration; this screen does not share location.')),
+              ],
+              if (widget.category == 'personalization') ...[
+                _section(t('Personalización del perfil', 'Profile personalization')),
+                _editorCard(icon: Icons.person_rounded, color: const Color(0xfffc3c44), title: t('Editar perfil', 'Edit profile'), subtitle: t('Avatar, banner, biografía y apariencia básica.', 'Avatar, banner, biography and basic appearance.'), where: t('Editor Flutter existente', 'Existing Flutter editor'), onTap: () => Navigator.pushNamed(context, '/profile_edit')),
+                _incompleteNote(t('El perfil nativo de Nali ya contiene mangas favoritos, GIF, emblemas, pronombres, enlaces y nameplates. Su migración a la única interfaz Flutter sigue pendiente.', 'Nali native profile already contains favorite manga, GIFs, badges, pronouns, links and nameplates. Porting them into the single Flutter UI remains pending.')),
+              ],
+              if (widget.category == 'lyrics') ...[
+                _section(t('Letras y proveedores', 'Lyrics and providers')),
+                _incompleteNote(t('El selector nativo de proveedores de letras permanece en BitChord. La preferencia compartida entre Flutter Settings y BitChord aún no está conectada.', 'The native lyrics-provider selector remains in BitChord. A shared preference between Flutter Settings and BitChord is not connected yet.')),
+              ],
+              if (widget.category == 'social') ...[
+                _section(t('Funciones sociales', 'Social features')),
+                LiquidGlass(borderRadius: BorderRadius.circular(14), child: ListTile(leading: const Icon(Icons.headphones_rounded, color: Color(0xfffc3c44)), title: Text(t('Escuchar juntos', 'Listen together'), style: const TextStyle(color: Colors.white)), subtitle: Text(t('Salas de escucha compartida.', 'Shared listening rooms.'), style: const TextStyle(color: Colors.white54, fontSize: 12)), trailing: const Icon(Icons.chevron_right, color: Colors.white38), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ListenTogetherScreen())))),
+                _incompleteNote(t('Chat, historias y mapa de amigos todavía no están expuestos desde la navegación Flutter principal.', 'Chat, stories and friends map are not yet exposed from the main Flutter navigation.')),
+              ],
+              if (widget.category == 'notifications') ...[
               _section(t('Notificaciones', 'Notifications')),
               LiquidGlass(
                 borderRadius: BorderRadius.circular(14),
@@ -564,6 +685,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
+              ],
+              if (widget.category == 'advanced') ...[
               // ── BETA ─────────────────────────────────────────
               _section(t('Beta / experimental', 'Beta / experimental')),
               LiquidGlass(
@@ -623,7 +746,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
+              _incompleteNote(t('La eliminación de cuenta no se activa hasta disponer de una Edge Function protegida que valide el JWT, borre Auth y gestione datos asociados. No se ejecuta ninguna eliminación desde el cliente.', 'Account deletion remains disabled until a protected Edge Function validates the JWT, deletes Auth and handles associated data. No deletion is run from the client.')),
 
+              ],
               const SizedBox(height: 24),
               Center(
                 child: Text('nali · 1.0.0',
@@ -635,6 +760,142 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _pickHomeBackground() async {
+    if (kIsWeb) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('El fondo local está disponible en Android e iOS.', 'Local backgrounds are available on Android and iOS.'))));
+      return;
+    }
+    try {
+      final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 90);
+      if (picked == null) return;
+      final directory = await getApplicationDocumentsDirectory();
+      final extension = picked.path.split('.').last.toLowerCase();
+      final safeExtension = const {'jpg', 'jpeg', 'png', 'webp'}.contains(extension) ? extension : 'jpg';
+      final destination = File('${directory.path}/nali_home_background.$safeExtension');
+      await File(picked.path).copy(destination.path);
+      await SettingsService.instance.setHomeBackgroundPath(destination.path);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('Fondo de Home actualizado.', 'Home background updated.'))));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+    }
+  }
+
+  Future<void> _clearHomeBackground() async {
+    final oldPath = SettingsService.instance.homeBackgroundPath;
+    await SettingsService.instance.setHomeBackgroundPath(null);
+    if (oldPath != null) {
+      try {
+        final directory = await getApplicationDocumentsDirectory();
+        if (oldPath.startsWith('${directory.path}/nali_home_background.')) {
+          final oldFile = File(oldPath);
+          if (await oldFile.exists()) await oldFile.delete();
+        }
+      } catch (_) {}
+    }
+  }
+
+  Widget _canvasSwitch(String key, String title, bool value) => SwitchListTile(
+    activeColor: const Color(0xfffc3c44),
+    title: Text(title, style: const TextStyle(color: Colors.white)),
+    value: value,
+    onChanged: (enabled) async {
+      final old = value;
+      setState(() {
+        switch (key) {
+          case 'appleMusic': _appleCanvas = enabled; break;
+          case 'spotify': _spotifyCanvas = enabled; break;
+          case 'external': _externalCanvas = enabled; break;
+          case 'repeat': _canvasRepeat = enabled; break;
+          case 'animatedCovers': _animatedCovers = enabled; break;
+        }
+      });
+      try { await NativePreferencesBridge.instance.setCanvasSetting(key, enabled); }
+      catch (error) {
+        if (mounted) setState(() {
+          switch (key) {
+            case 'appleMusic': _appleCanvas = old; break;
+            case 'spotify': _spotifyCanvas = old; break;
+            case 'external': _externalCanvas = old; break;
+            case 'repeat': _canvasRepeat = old; break;
+            case 'animatedCovers': _animatedCovers = old; break;
+          }
+        });
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    },
+  );
+
+  String _categoryTitle(String id) => switch (id) {
+    'account' => t('Cuenta', 'Account'), 'appearance' => t('Apariencia', 'Appearance'),
+    'privacy' => t('Privacidad', 'Privacy'), 'personalization' => t('Personalización', 'Personalization'),
+    'playback' => t('Reproducción', 'Playback'), 'lyrics' => t('Letras', 'Lyrics'),
+    'library' => t('Biblioteca', 'Library'), 'notifications' => t('Notificaciones', 'Notifications'),
+    'social' => t('Social', 'Social'), 'advanced' => t('Ajustes avanzados', 'Advanced settings'),
+    _ => t('Ajustes', 'Settings'),
+  };
+
+  Widget _buildCategoryDashboard(SettingsService s) {
+    final items = <(String, IconData, String, Color)>[
+      ('account', Icons.manage_accounts_outlined, t('Sesión, correo y seguridad', 'Session, email and security'), const Color(0xff8da7ff)),
+      ('appearance', Icons.palette_outlined, t('Idioma, efectos y tipografía', 'Language, effects and typography'), const Color(0xffd6a0ff)),
+      ('privacy', Icons.shield_outlined, t('Visibilidad y actividad compartida', 'Visibility and shared activity'), const Color(0xff6ed6b1)),
+      ('personalization', Icons.person_pin_circle_outlined, t('Perfil y presentación', 'Profile and presentation'), const Color(0xffffa477)),
+      ('playback', Icons.graphic_eq_rounded, t('Crossfade y karaoke', 'Crossfade and karaoke'), const Color(0xfffc3c44)),
+      ('lyrics', Icons.lyrics_outlined, t('Letras y proveedores', 'Lyrics and providers'), const Color(0xff7fc9ee)),
+      ('library', Icons.library_music_outlined, t('Caché, importación y playlists', 'Cache, imports and playlists'), const Color(0xffa7c77a)),
+      ('notifications', Icons.notifications_none_rounded, t('Sonidos y alertas', 'Sounds and alerts'), const Color(0xffffca70)),
+      ('social', Icons.people_outline_rounded, t('Escucha compartida y comunidad', 'Shared listening and community'), const Color(0xff7fc4c9)),
+      ('advanced', Icons.tune_rounded, t('Funciones beta y herramientas', 'Beta features and tools'), const Color(0xffb0a0ff)),
+    ];
+    return Scaffold(
+      backgroundColor: s.amoled ? Colors.black : const Color(0xFF0C0C0E),
+      appBar: AppBar(title: Text(t('Ajustes', 'Settings')), backgroundColor: Colors.transparent),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 36), children: [
+        Text(t('Todo en su sitio.', 'Everything in its place.'), style: const TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        Text(t('Cada categoría abre sus propios controles.', 'Each category opens its own controls.'), style: const TextStyle(color: Colors.white54, fontSize: 13)),
+        const SizedBox(height: 18),
+        for (final item in items) _editorCard(icon: item.$2, color: item.$4, title: _categoryTitle(item.$1), subtitle: item.$3, where: '', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen(category: item.$1)))),
+      ]),
+    );
+  }
+
+  Widget _incompleteNote(String message) => Container(
+    margin: const EdgeInsets.only(top: 12), padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(color: Colors.white.withOpacity(0.035), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white12)),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.info_outline_rounded, color: Colors.white54, size: 19), const SizedBox(width: 10), Expanded(child: Text(message, style: const TextStyle(color: Colors.white60, fontSize: 12, height: 1.4)))]),
+  );
+
+  Future<void> _setListeningVisibility(bool value) async {
+    final old = _showListening; setState(() => _showListening = value);
+    try { await SupabaseService.updateListeningVisibility(value); }
+    catch (error) { if (mounted) setState(() => _showListening = old); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error'))); }
+  }
+
+  Future<void> _showPasswordRecovery() async {
+    final controller = TextEditingController(text: SupabaseService.currentUser?.email ?? '');
+    final email = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xff19191e),
+      title: Text(t('Restablecer contraseña', 'Reset password'), style: const TextStyle(color: Colors.white)),
+      content: TextField(controller: controller, keyboardType: TextInputType.emailAddress, autofocus: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(labelText: t('Correo electrónico', 'Email address'), labelStyle: const TextStyle(color: Colors.white60))),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: Text(t('Enviar enlace', 'Send link')))],
+    ));
+    controller.dispose(); if (email == null || email.isEmpty) return;
+    try { await SupabaseService.sendPasswordRecovery(email); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t('Si la cuenta existe, recibirás un correo con el enlace seguro. No compartas ese enlace.', 'If the account exists, you will receive a secure recovery link. Do not share it.')))); }
+    catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error'))); }
+  }
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: const Color(0xff19191e), title: Text(t('Cerrar sesión', 'Sign out'), style: const TextStyle(color: Colors.white)),
+      content: Text(t('¿Quieres cerrar la sesión de esta cuenta en este dispositivo?', 'Do you want to sign out of this account on this device?'), style: const TextStyle(color: Colors.white70)),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t('Cerrar sesión', 'Sign out'), style: const TextStyle(color: Color(0xffff7777))))],
+    ));
+    if (confirmed != true) return;
+    try { await SupabaseService.signOut(); if (mounted) Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (route) => false); }
+    catch (error) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error'))); }
   }
 
   void _openPlaylistDefaults() {
