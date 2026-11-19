@@ -4,7 +4,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
-import android.content.Intent
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -65,6 +64,7 @@ import com.pokke.music.ui.profile.ListeningCard
 import com.pokke.music.ui.profile.LinkFavicon
 import com.pokke.music.ui.profile.hostLabel
 import com.pokke.music.ui.profile.platformLabel
+import com.pokke.music.util.ShareLinks
 import com.pokke.music.ui.profile.MangaFavoritesEditor
 import com.pokke.music.ui.profile.MangaFavoritesDisplay
 import kotlinx.coroutines.launch
@@ -266,13 +266,9 @@ fun ProfileScreen(repository: AuthRepository, onBack: () -> Unit, onSignedOut: (
         }
     }
     val shareProfileNow: () -> Unit = {
-        val shareText = "Mira mi perfil en Pokke: pokke://user/${session?.userId.orEmpty()}"
+        val userId = session?.userId.orEmpty()
         runCatching {
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, shareText)
-            }
-            context.startActivity(Intent.createChooser(intent, "Compartir perfil"))
+            ShareLinks.share(context, ShareLinks.Kind.PROFILE, userId, "Mira mi perfil en Nali")
         }.onFailure { message = it.localizedMessage ?: "No se pudo compartir el perfil" }
     }
 
