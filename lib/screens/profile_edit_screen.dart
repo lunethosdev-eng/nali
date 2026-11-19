@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:nali/services/nali_links.dart';
@@ -17,7 +18,16 @@ class ProfileEditScreen extends StatefulWidget {
 
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _displayNameCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
+  final _pronounsCtrl = TextEditingController();
+  final _statusCtrl = TextEditingController();
+  final _badgesCtrl = TextEditingController();
+  final _mangasCtrl = TextEditingController();
+  final _linkLabelCtrl = TextEditingController();
+  final _linkUrlCtrl = TextEditingController();
+  bool _isPublic = true;
+  bool _showListening = true;
   String? _avatarUrl;
   String? _bannerUrl;
   File? _newAvatar;
@@ -46,6 +56,20 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   String t(String es, String en) => SettingsService.instance.locale == 'en' ? en : es;
 
   @override
+  void dispose() {
+    _displayNameCtrl.dispose();
+    _usernameCtrl.dispose();
+    _bioCtrl.dispose();
+    _pronounsCtrl.dispose();
+    _statusCtrl.dispose();
+    _badgesCtrl.dispose();
+    _mangasCtrl.dispose();
+    _linkLabelCtrl.dispose();
+    _linkUrlCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   void initState() {
     super.initState();
     _load();
@@ -55,7 +79,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final profile = await SupabaseService.getProfile();
     if (profile != null) {
       _displayNameCtrl.text = profile['display_name'] ?? '';
+      _usernameCtrl.text = profile['username'] ?? '';
       _bioCtrl.text = profile['bio'] ?? '';
+      _pronounsCtrl.text = profile['pronouns'] ?? '';
+      _statusCtrl.text = profile['status_text'] ?? '';
+      _badgesCtrl.text = profile['badges'] ?? '';
+      final rawMangas = profile['favorite_mangas']?.toString() ?? '[]';
+      _mangasCtrl.text = _mangaTitlesFromJson(rawMangas);
+      _linkLabelCtrl.text = profile['link_label'] ?? '';
+      _linkUrlCtrl.text = profile['link_url'] ?? '';
+      _isPublic = profile['is_public'] != false;
+      _showListening = profile['show_listening'] != false;
       _avatarUrl = profile['avatar_url'];
       _bannerUrl = profile['banner_url'];
       _theme = profile['theme']?.toString()
@@ -69,6 +103,30 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           ?? 'none';
     }
     setState(() => _loading = false);
+  }
+
+  String _mangaTitlesFromJson(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return '';
+      return decoded.map((item) => item is Map ? (item['title'] ?? '').toString() : '').where((title) => title.trim().isNotEmpty).join(', ');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _mangaJsonFromTitles(String raw) {
+    final titles = raw.split(',').map((value) => value.trim()).where((value) => value.isNotEmpty).take(12).toList();
+    final entries = titles.asMap().entries.map((entry) {
+      final title = entry.value;
+      final slug = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
+      return {
+        'id': slug.isEmpty ? 'favorite-${entry.key + 1}' : slug,
+        'title': title,
+        'cover': null,
+      };
+    }).toList();
+    return jsonEncode(entries);
   }
 
   Future<void> _pickMedia({required bool isAvatar}) async {
@@ -108,6 +166,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         bio: _bioCtrl.text.trim(),
         avatarUrl: avatar,
         bannerUrl: banner,
+        username: _usernameCtrl.text.trim().isEmpty ? null : _usernameCtrl.text.trim(),
+        pronouns: _pronounsCtrl.text,
+        statusText: _statusCtrl.text,
+        badges: _badgesCtrl.text,
+        isPublic: _isPublic,
+        linkLabel: _linkLabelCtrl.text,
+        linkUrl: _linkUrlCtrl.text,
+        showListening: _showListening,
+        favoriteMangas: _mangaJsonFromTitles(_mangasCtrl.text),
       );
       // theme column best-effort
       SettingsService.instance.profileTheme = _theme;
@@ -201,6 +268,22 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       default:
         return child;
     }
+  }
+
+  Widget _profileField(TextEditingController controller, String label, {String? hint, int maxLines = 1, TextInputType? keyboardType}) {
+    return LiquidGlass(
+      blur: 14, opacity: 0.08, borderRadius: BorderRadius.circular(14),
+      child: TextField(
+        controller: controller, maxLines: maxLines, keyboardType: keyboardType,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label, hintText: hint,
+          labelStyle: TextStyle(color: Colors.white.withOpacity(0.45)),
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
+          border: InputBorder.none, contentPadding: const EdgeInsets.all(14),
+        ),
+      ),
+    );
   }
 
   @override
@@ -439,6 +522,25 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 12),
+              _profileField(_usernameCtrl, t('Nombre de usuario', 'Username'), hint: '@usuario'),
+              const SizedBox(height: 12),
+              _profileField(_pronounsCtrl, t('Pronombres (opcional)', 'Pronouns (optional)')),
+              const SizedBox(height: 12),
+              _profileField(_statusCtrl, t('Estado', 'Status'), hint: t('¿Qué estás haciendo?', 'What are you up to?')),
+              const SizedBox(height: 12),
+              _profileField(_badgesCtrl, t('Insignias', 'Badges'), hint: t('Separadas por comas', 'Comma separated')),
+              const SizedBox(height: 12),
+              _profileField(_mangasCtrl, t('Mangas favoritos', 'Favorite manga'), hint: t('Títulos separados por comas', 'Titles separated by commas'), maxLines: 2),
+              const SizedBox(height: 12),
+              _profileField(_linkLabelCtrl, t('Etiqueta del enlace', 'Link label')),
+              const SizedBox(height: 12),
+              _profileField(_linkUrlCtrl, t('URL del enlace', 'Link URL'), keyboardType: TextInputType.url),
+              const SizedBox(height: 8),
+              LiquidGlass(blur: 12, opacity: 0.08, borderRadius: BorderRadius.circular(14), child: Column(children: [
+                SwitchListTile(value: _isPublic, activeColor: const Color(0xfffc3c44), title: Text(t('Perfil público', 'Public profile'), style: const TextStyle(color: Colors.white)), onChanged: (v) => setState(() => _isPublic = v)),
+                SwitchListTile(value: _showListening, activeColor: const Color(0xfffc3c44), title: Text(t('Mostrar actividad musical', 'Show listening activity'), style: const TextStyle(color: Colors.white)), onChanged: (v) => setState(() => _showListening = v)),
+              ])),
               const SizedBox(height: 20),
               LiquidGlass(
                 blur: 14,
