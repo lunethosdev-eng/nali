@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:nali/services/nali_links.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/settings_service.dart';
 // profile theme via SettingsService
@@ -138,10 +138,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   void _shareProfile() {
     final name = _displayNameCtrl.text.trim().isEmpty ? 'Nali' : _displayNameCtrl.text.trim();
     final id = SupabaseService.currentUser?.id ?? '';
-    Share.share(t(
-      'Mira mi perfil en Nali: @$name\npokke://user/$id',
-      'Check my Nali profile: @$name\npokke://user/$id',
-    ));
+    if (id.isEmpty) return;
+    NaliLinks.share('@$name', NaliLinks.profile(id),
+      description: t('Mira mi perfil en Nali', 'Check my Nali profile on Nali'));
   }
 
 
