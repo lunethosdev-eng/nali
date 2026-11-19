@@ -8,12 +8,15 @@ import android.net.Uri
 object ShareLinks {
     private const val SCHEME = "pokke"
     private const val HOST = "share"
+    private const val WEB_BASE_URL = "https://lunethosdev-eng.github.io/nali/"
 
     enum class Kind(val path: String, val label: String) {
         PROFILE("profile", "Perfil"),
         SONG("song", "Canción"),
         PLAYLIST("playlist", "Playlist"),
         LYRICS("lyrics", "Letra"),
+        ARTIST("artist", "Artista"),
+        ALBUM("album", "Álbum"),
     }
 
     sealed interface Target {
@@ -27,11 +30,8 @@ object ShareLinks {
 
     fun share(context: Context, kind: Kind, id: String, title: String) {
         if (id.isBlank()) return
-        val link = Uri.Builder()
-            .scheme(SCHEME)
-            .authority(HOST)
-            .appendPath(kind.path)
-            .appendPath(id)
+        val link = Uri.parse(WEB_BASE_URL).buildUpon()
+            .fragment("/${kind.path}/$id")
             .build()
         val message = "$title\n$link"
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -44,6 +44,12 @@ object ShareLinks {
     fun parse(uri: Uri?): Target? {
         uri ?: return null
         if (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) {
+            val fragment = uri.fragment.orEmpty()
+            if (uri.host == "lunethosdev-eng.github.io" && uri.path.startsWith("/nali/") && fragment.startsWith("/")) {
+                val route = Uri.parse(fragment)
+                val segments = route.pathSegments
+                if (segments.size >= 2) return target(segments[0], segments[1])
+            }
             val segments = uri.pathSegments
             if (segments.size >= 2 && segments.firstOrNull() == "share") {
                 return target(segments[1], segments.getOrNull(2) ?: uri.getQueryParameter("id").orEmpty())
