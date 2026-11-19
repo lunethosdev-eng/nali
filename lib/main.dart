@@ -215,6 +215,9 @@ class _NaliAppState extends State<NaliApp> {
         if (settings.name == '/player') {
           final args = settings.arguments;
           final song = args is Map<String, dynamic> ? args : <String, dynamic>{};
+          if (NativePlayerBridge.instance.supported) {
+            return SlideUpPageRoute<void>(page: _NativePlayerHandoff(song: song));
+          }
           return MusicPlayer.route(song);
         }
         return null;
@@ -223,6 +226,58 @@ class _NaliAppState extends State<NaliApp> {
   }
 }
 
+
+class _NativePlayerHandoff extends StatefulWidget {
+  final Map<String, dynamic> song;
+  const _NativePlayerHandoff({required this.song});
+
+  @override
+  State<_NativePlayerHandoff> createState() => _NativePlayerHandoffState();
+}
+
+class _NativePlayerHandoffState extends State<_NativePlayerHandoff> {
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _open());
+  }
+
+  Future<void> _open() async {
+    try {
+      if (widget.song.isNotEmpty) {
+        await PlayerController.instance.playSong(widget.song, forceRestart: true);
+      }
+      await NativePlayerBridge.instance.invoke<bool>('openNativePlayer');
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: const Color(0xFF0C0C0E),
+    body: Center(child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.music_note_rounded, color: Color(0xfffc3c44), size: 38),
+        const SizedBox(height: 12),
+        Text(_error == null ? 'Abriendo BitChord Now Playing…' : 'No se pudo abrir BitChord', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+          const SizedBox(height: 12),
+          TextButton(onPressed: () => Navigator.of(context).pushReplacement(MusicPlayer.route(widget.song)), child: const Text('Abrir reproductor Flutter')),
+        ] else ...[
+          const SizedBox(height: 16),
+          const CircularProgressIndicator(color: Color(0xfffc3c44)),
+        ],
+      ]),
+    )),
+  );
+}
 
 class SlideUpPageRoute<T> extends PageRouteBuilder<T> {
   final Widget page;
