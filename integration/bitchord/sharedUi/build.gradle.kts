@@ -31,14 +31,17 @@ val CMP_DESKTOP =
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
-    id("com.android.library")
+    id("com.android.kotlin.multiplatform.library")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
 kotlin {
-    androidTarget {
+    android {
+        namespace = "com.music.bitchord.sharedui"
+        compileSdk = 36
+        minSdk = 26
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
         }
@@ -102,13 +105,6 @@ kotlin {
     }
 }
 
-android {
-    namespace = "com.music.bitchord.sharedui"
-    compileSdk = 36
-    defaultConfig {
-        minSdk = 26
-    }
-}
 
 compose.resources {
     publicResClass = true
