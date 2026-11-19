@@ -1,6 +1,7 @@
 package com.pokke.app
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -21,6 +22,11 @@ class MainActivity : AudioServiceActivity() {
     }
 
     private val audioChannel = "com.pokke.app/audio_output"
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
