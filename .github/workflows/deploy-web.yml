@@ -19,16 +19,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+
       - name: Enable web
         run: flutter config --enable-web
-      - name: Pub get
+
+      - name: Resolve dependencies
         run: flutter pub get
-      - name: Build web
-        run: flutter build web --release --no-wasm-dry-run --base-href /Nali/
+
+      - name: Calculate GitHub Pages base path
+        id: pages-path
+        shell: bash
+        run: |
+          REPOSITORY="${GITHUB_REPOSITORY#*/}"
+          OWNER="${GITHUB_REPOSITORY%%/*}"
+          if [ "$REPOSITORY" = "$OWNER.github.io" ]; then
+            echo "base-href=/" >> "$GITHUB_OUTPUT"
+          else
+            echo "base-href=/$REPOSITORY/" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Flutter Web
+        run: flutter build web --release --base-href "${{ steps.pages-path.outputs.base-href }}"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
