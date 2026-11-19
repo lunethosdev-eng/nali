@@ -13,6 +13,7 @@ class SettingsService extends ChangeNotifier {
   bool reduceAnimations = false;
   bool showMiniPlayer = true;
   bool amoled = false;
+  String? homeBackgroundPath;
   String locale = 'es';
   String playerFont = 'default';
   String selectedFontId = 'nothing-font-5x7.otf';
@@ -124,6 +125,7 @@ class SettingsService extends ChangeNotifier {
     reduceAnimations = p.getBool('reduce_anim') ?? false;
     showMiniPlayer = p.getBool('mini_player') ?? true;
     amoled = p.getBool('amoled') ?? false;
+    homeBackgroundPath = p.getString('home_background_path');
     locale = p.getString('locale') ?? 'es';
     playerFont = p.getString('player_font') ?? 'default';
     selectedFontId = p.getString('selected_font_id') ?? 'nothing-font-5x7.otf';
@@ -352,6 +354,17 @@ class SettingsService extends ChangeNotifier {
         break;
     }
     await save();
+  }
+
+  Future<void> setHomeBackgroundPath(String? path) async {
+    homeBackgroundPath = path;
+    final p = await SharedPreferences.getInstance();
+    if (path == null || path.isEmpty) {
+      await p.remove('home_background_path');
+    } else {
+      await p.setString('home_background_path', path);
+    }
+    notifyListeners();
   }
 
   Future<void> setPlayerLayout(List<String> layout) async {
