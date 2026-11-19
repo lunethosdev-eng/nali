@@ -9,11 +9,19 @@ import android.os.Build
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.pokke.music.data.preferences.UserPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import com.pokke.music.player.PlayerController
 import com.pokke.music.player.PokkeAndroidPlayerHost
 import com.pokke.music.player.PokkeCanvasPlayerHost
 
 class MainActivity : AudioServiceActivity() {
+    private val bridgeScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         PlayerController.init(this)
@@ -31,6 +39,39 @@ class MainActivity : AudioServiceActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         FlutterPlayerBridge(this, flutterEngine)
+        val nativePreferences = UserPreferences(applicationContext)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nali/native_preferences")
+            .setMethodCallHandler { call, result ->
+                bridgeScope.launch {
+                    try {
+                        when (call.method) {
+                            "getCanvasSettings" -> result.success(mapOf(
+                                "appleMusic" to nativePreferences.appleCanvasEnabled.first(),
+                                "spotify" to nativePreferences.spotifyCanvasEnabled.first(),
+                                "external" to nativePreferences.externalCanvasEnabled.first(),
+                                "repeat" to nativePreferences.canvasRepeatEnabled.first(),
+                                "animatedCovers" to nativePreferences.pokkeAnimatedCoversEnabled.first(),
+                            ))
+                            "setCanvasSetting" -> {
+                                val key = call.argument<String>("key") ?: error("Missing setting key")
+                                val enabled = call.argument<Boolean>("enabled") ?: false
+                                when (key) {
+                                    "appleMusic" -> nativePreferences.setAppleCanvasEnabled(enabled)
+                                    "spotify" -> nativePreferences.setSpotifyCanvasEnabled(enabled)
+                                    "external" -> nativePreferences.setExternalCanvasEnabled(enabled)
+                                    "repeat" -> nativePreferences.setCanvasRepeatEnabled(enabled)
+                                    "animatedCovers" -> nativePreferences.setPokkeAnimatedCoversEnabled(enabled)
+                                    else -> error("Unknown canvas setting: $key")
+                                }
+                                result.success(true)
+                            }
+                            else -> result.notImplemented()
+                        }
+                    } catch (error: Throwable) {
+                        result.error("native_preferences_error", error.localizedMessage ?: "Preference update failed", null)
+                    }
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, audioChannel)
             .setMethodCallHandler { call, result ->
                 if (call.method == "getAudioOutput") {
@@ -39,6 +80,11 @@ class MainActivity : AudioServiceActivity() {
                     result.notImplemented()
                 }
             }
+    }
+
+    override fun onDestroy() {
+        bridgeScope.cancel()
+        super.onDestroy()
     }
 
     private fun currentOutput(): Map<String, String> {
