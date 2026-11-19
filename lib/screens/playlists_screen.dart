@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:nali/services/nali_links.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/settings_service.dart';
@@ -248,10 +248,10 @@ class _PlaylistsScreenState extends State<PlaylistsScreen> {
                                 onPressed: () {
                                   final id = pl['id'] ?? '';
                                   final name = pl['name'] ?? 'playlist';
-                                  Share.share(t(
-                                    'Escucha mi playlist "$name" en Nali\npokke://playlist/$id',
-                                    'Listen to my playlist "$name" on Nali\npokke://playlist/$id',
-                                  ));
+                                  if (id.toString().isNotEmpty) {
+                                    NaliLinks.share(name.toString(), NaliLinks.playlist(id.toString()),
+                                      description: t('Escucha esta playlist en Nali', 'Listen to this playlist on Nali'));
+                                  }
                                 },
                               ),
                               const Icon(Icons.chevron_right, color: Colors.white38),
