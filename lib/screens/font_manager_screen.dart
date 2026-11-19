@@ -71,7 +71,7 @@ class _FontManagerScreenState extends State<FontManagerScreen> {
               child: ListTile(
                 leading: const Icon(Icons.add_circle_outline, color: Colors.white70),
                 title: Text(t('Importar fuente', 'Import font'), style: const TextStyle(color: Colors.white)),
-                subtitle: Text(t('Añade archivos .TTF o .OTF desde tu dispositivo', 'Add .TTF or .OTF files from your device'), style: const TextStyle(color: Colors.white45, fontSize: 12)),
+                subtitle: Text(t('Añade archivos .TTF o .OTF desde tu dispositivo', 'Add .TTF or .OTF files from your device'), style: const TextStyle(color: Colors.white38, fontSize: 12)),
                 trailing: _importing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_right, color: Colors.white54),
                 onTap: _importing ? null : _import,
               ),
