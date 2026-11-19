@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nali/widgets/compact_header.dart';
 import 'package:nali/services/supabase_service.dart';
@@ -166,9 +168,19 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0C0C0E),
-      body: _loading
+    return AnimatedBuilder(
+      animation: SettingsService.instance,
+      builder: (context, _) {
+        final backgroundPath = SettingsService.instance.homeBackgroundPath;
+        final hasBackground = !kIsWeb && backgroundPath != null && File(backgroundPath).existsSync();
+        return Scaffold(
+          backgroundColor: const Color(0xFF0C0C0E),
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (hasBackground) Image.file(File(backgroundPath!), fit: BoxFit.cover),
+              if (hasBackground) const ColoredBox(color: Color(0x990C0C0E)),
+              _loading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xfffc3c44)))
           : RefreshIndicator(
@@ -274,6 +286,10 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
