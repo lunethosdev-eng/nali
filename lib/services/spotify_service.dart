@@ -21,7 +21,7 @@ class SpotifyService {
   static const defaultClientId = 'b4a45e2d1a13437fa4a668334607a0fe';
   static const mobileRedirect = 'pokke://spotify-callback';
   static const webRedirect =
-      'https://lunethosdev-eng.github.io/Moshii/spotify-callback.html';
+      'https://lunethosdev-eng.github.io/nali/spotify-callback.html';
   static const scopes =
       'playlist-read-private playlist-read-collaborative user-library-read';
 
