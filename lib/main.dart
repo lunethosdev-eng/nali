@@ -37,6 +37,11 @@ import 'package:nali/screens/wrap_screen.dart';
 import 'package:nali/screens/local_import_screen.dart';
 import 'package:nali/screens/notifications_screen.dart';
 import 'package:nali/services/font_manager_service.dart';
+import 'package:nali/services/nali_links.dart';
+import 'package:nali/services/native_player_bridge.dart';
+import 'package:nali/screens/playlist_detail_screen.dart';
+
+final GlobalKey<NavigatorState> _naliNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,18 +76,93 @@ class NaliApp extends StatefulWidget {
 }
 
 class _NaliAppState extends State<NaliApp> {
+  StreamSubscription<Uri>? _linkSubscription;
+  final Set<String> _handledLinks = <String>{};
+
   @override
   void initState() {
     super.initState();
-    _listenSpotifyLinks();
+    _listenIncomingLinks();
   }
 
-  void _listenSpotifyLinks() {
-    final appLinks = AppLinks();
-    appLinks.uriLinkStream.listen((uri) async {
-      if (uri.scheme == 'pokke' || uri.scheme == 'nali') {
-        final ok = await SpotifyService.instance.handleIncomingLink(uri);
-        debugPrint('Spotify incoming link handled: $ok err=${SpotifyService.instance.lastError}');
+  @override
+  void dispose() {
+    _linkSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _listenIncomingLinks() {
+    if (!kIsWeb) {
+      final appLinks = AppLinks();
+      _linkSubscription = appLinks.uriLinkStream.listen(
+        _handleIncomingUri,
+        onError: (Object error) => debugPrint('Nali incoming link: $error'),
+      );
+      unawaited(appLinks.getInitialLink().then((uri) {
+        if (uri != null) _handleIncomingUri(uri);
+      }).catchError((Object error) {
+        debugPrint('Nali initial link: $error');
+      }));
+    } else if (Uri.base.fragment.startsWith('/')) {
+      // GitHub Pages Flutter routes are published in the URL fragment.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handleIncomingUri(Uri.base));
+    }
+  }
+
+  Future<void> _handleIncomingUri(Uri uri) async {
+    if (uri.scheme == 'pokke' || uri.scheme == 'nali') {
+      final handled = await SpotifyService.instance.handleIncomingLink(uri);
+      if (handled) return;
+    }
+    final link = NaliSharedLink.parse(uri);
+    if (link == null || !_handledLinks.add(uri.toString())) return;
+
+    // Wait for the root navigator to exist (including the initial boot route).
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final navigator = _naliNavigatorKey.currentState;
+      if (navigator == null) return;
+      try {
+        if (link.kind == 'song' || link.kind == 'lyrics') {
+          var row = await SupabaseService.ukiyo
+              .from('songs').select().eq('id', link.id).maybeSingle();
+          row ??= await SupabaseService.ukiyo
+              .from('songs').select().eq('youtube_id', link.id).maybeSingle();
+          if (row == null) throw StateError('La canción ya no está disponible.');
+          final song = Map<String, dynamic>.from(row);
+          await PlayerController.instance.playSong(song, forceRestart: true);
+          if (link.kind == 'lyrics' && link.start != null) {
+            await PlayerController.instance.seekTo(Duration(seconds: link.start!));
+          }
+          if (NativePlayerBridge.instance.supported) {
+            await NativePlayerBridge.instance.invoke('openNativePlayer');
+          } else {
+            navigator.pushNamed('/player', arguments: song);
+          }
+          return;
+        }
+
+        if (link.kind == 'playlist') {
+          final row = await SupabaseService.kokoro
+              .from('playlists').select().eq('id', link.id).maybeSingle();
+          if (row == null) throw StateError('La playlist ya no está disponible.');
+          navigator.push(MaterialPageRoute<void>(
+            builder: (_) => PlaylistDetailScreen(playlist: Map<String, dynamic>.from(row)),
+          ));
+          return;
+        }
+
+        final label = switch (link.kind) {
+          'profile' => 'El perfil compartido todavía no tiene una pantalla pública Flutter conectada.',
+          'artist' => 'El identificador de artista todavía no tiene un repositorio público conectado.',
+          'album' => 'El identificador de álbum todavía no tiene un repositorio público conectado.',
+          _ => 'Este enlace de Nali no es compatible o está incompleto.',
+        };
+        ScaffoldMessenger.of(navigator.context).showSnackBar(SnackBar(content: Text(label)));
+      } catch (error) {
+        final context = navigator.context;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
+        );
       }
     });
   }
@@ -92,6 +172,7 @@ class _NaliAppState extends State<NaliApp> {
     return AnimatedBuilder(
       animation: SettingsService.instance,
       builder: (context, _) => MaterialApp(
+      navigatorKey: _naliNavigatorKey,
       title: 'Nali',
       theme: ThemeData(
         colorScheme: const ColorScheme.dark(),
