@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:share_plus/share_plus.dart';
+import 'package:nali/services/nali_links.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/widgets/liquid_sheet.dart';
 import 'package:nali/widgets/karaoke_lyrics.dart';
@@ -1847,8 +1847,9 @@ Text(
     if (s == null) return;
     final title = (s['title'] ?? '').toString();
     final artist = (s['artist'] ?? '').toString();
-    final id = (s['id'] ?? '').toString();
-    final link = 'https://pokke.app/song/$id';
+    final id = (s['id'] ?? s['youtube_id'] ?? '').toString();
+    if (id.isEmpty) return;
+    final link = NaliLinks.song(id).toString();
     final text = SettingsService.instance.locale == 'en'
         ? 'Listen to "$title" by $artist on Nali\n$link'
         : 'Escucha "$title" de $artist en Nali\n$link';
@@ -1896,7 +1897,7 @@ Text(
                       style: const TextStyle(color: Colors.white)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Share.share(text);
+                    NaliLinks.share('"$title" — $artist', NaliLinks.song(id), description: text.split('\n').first);
                   },
                 ),
               ],
