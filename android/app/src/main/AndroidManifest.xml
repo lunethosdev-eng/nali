@@ -56,6 +56,16 @@
                 <data android:scheme="pokke" android:host="spotify-callback"/>
                 <data android:scheme="nali" android:host="spotify-callback"/>
             </intent-filter>
+            <!-- Official Nali Web content links. Verification requires the
+                 assetlinks.json file at the domain root (see docs/SHARING.md). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                    android:host="lunethosdev-eng.github.io"
+                    android:pathPrefix="/nali/"/>
+            </intent-filter>
         </activity>
 
         <!-- audio_service: system media notification + lockscreen controls -->
