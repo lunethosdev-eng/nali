@@ -106,6 +106,39 @@ class SupabaseService {
     await kokoro.auth.signOut();
   }
 
+  /// Sends Supabase's password-reset email. The current password is never read
+  /// or transmitted by the client.
+  static Future<void> sendPasswordRecovery(String email, {String? redirectTo}) async {
+    final cleanEmail = email.trim();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      throw ArgumentError('Introduce un correo electrónico válido.');
+    }
+    await kokoro.auth.resetPasswordForEmail(
+      cleanEmail,
+      redirectTo: redirectTo,
+    );
+  }
+
+  /// Persists profile visibility in the account row used by native and public
+  /// profile implementations. This is distinct from a local UI preference.
+  static Future<void> updateProfileVisibility(bool isPublic) async {
+    final user = currentUser;
+    if (user == null) throw StateError('Debes iniciar sesión.');
+    await kokoro.from('profiles').update({
+      'is_public': isPublic,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', user.id);
+  }
+
+  static Future<void> updateListeningVisibility(bool visible) async {
+    final user = currentUser;
+    if (user == null) throw StateError('Debes iniciar sesión.');
+    await kokoro.from('profiles').update({
+      'show_listening': visible,
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', user.id);
+  }
+
   static Future<Map<String, dynamic>?> getProfile() async {
     if (currentUser == null) return null;
     return await kokoro
@@ -120,6 +153,15 @@ class SupabaseService {
     String? bio,
     String? avatarUrl,
     String? bannerUrl,
+    String? username,
+    String? pronouns,
+    String? statusText,
+    String? badges,
+    bool? isPublic,
+    String? linkLabel,
+    String? linkUrl,
+    bool? showListening,
+    String? favoriteMangas,
   }) async {
     if (currentUser == null) return;
     final data = <String, dynamic>{
@@ -129,6 +171,21 @@ class SupabaseService {
     if (bio != null) data['bio'] = bio;
     if (avatarUrl != null) data['avatar_url'] = avatarUrl;
     if (bannerUrl != null) data['banner_url'] = bannerUrl;
+    if (username != null) {
+      final clean = username.trim().toLowerCase();
+      if (!RegExp(r'^[a-zA-Z0-9_.]{3,24}$').hasMatch(clean)) {
+        throw ArgumentError('El usuario debe tener 3–24 caracteres: letras, números, _ o .');
+      }
+      data['username'] = clean;
+    }
+    if (pronouns != null) data['pronouns'] = pronouns.trim();
+    if (statusText != null) data['status_text'] = statusText.trim();
+    if (badges != null) data['badges'] = badges.trim();
+    if (isPublic != null) data['is_public'] = isPublic;
+    if (linkLabel != null) data['link_label'] = linkLabel.trim();
+    if (linkUrl != null) data['link_url'] = linkUrl.trim();
+    if (showListening != null) data['show_listening'] = showListening;
+    if (favoriteMangas != null) data['favorite_mangas'] = favoriteMangas;
     await kokoro.from('profiles').update(data).eq('id', currentUser!.id);
   }
 
