@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/account_sessions_service.dart';
 import 'package:nali/services/listening_history.dart';
 import 'package:nali/services/spotify_service.dart';
 import 'package:nali/services/player_controller.dart';
@@ -14,6 +16,7 @@ import 'package:nali/services/headphone_service.dart';
 import 'package:nali/services/media_audio_handler.dart';
 import 'package:app_links/app_links.dart';
 import 'package:nali/screens/auth_screen.dart';
+import 'package:nali/screens/password_recovery_screen.dart';
 import 'package:nali/screens/welcome_screen.dart';
 import 'package:nali/Bottom%20NavBar/bottom_nav.dart';
 import 'package:nali/pages/list.dart';
@@ -77,17 +80,32 @@ class NaliApp extends StatefulWidget {
 
 class _NaliAppState extends State<NaliApp> {
   StreamSubscription<Uri>? _linkSubscription;
+  StreamSubscription<AuthState>? _authSubscription;
+  bool _recoveryRouteOpened = false;
   final Set<String> _handledLinks = <String>{};
 
   @override
   void initState() {
     super.initState();
     _listenIncomingLinks();
+    _authSubscription = SupabaseService.kokoro.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.signedIn || data.event == AuthChangeEvent.tokenRefreshed) {
+        unawaited(AccountSessionsService.instance.saveCurrent().catchError((Object e) => debugPrint('Account session save: $e')));
+      }
+      if (data.event == AuthChangeEvent.passwordRecovery && !_recoveryRouteOpened) {
+        _recoveryRouteOpened = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final nav = _naliNavigatorKey.currentState;
+          if (nav != null) nav.push(MaterialPageRoute<void>(builder: (_) => const PasswordRecoveryScreen())).then((_) => _recoveryRouteOpened = false);
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     _linkSubscription?.cancel();
+    _authSubscription?.cancel();
     super.dispose();
   }
 
@@ -175,14 +193,22 @@ class _NaliAppState extends State<NaliApp> {
       navigatorKey: _naliNavigatorKey,
       title: 'Nali',
       theme: ThemeData(
-        colorScheme: const ColorScheme.dark(),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xfffc3c44), brightness: Brightness.light),
+        fontFamily: SettingsService.instance.fontFamily,
+        scaffoldBackgroundColor: const Color(0xfff5f5f7),
+        appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0),
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xfffc3c44), brightness: Brightness.dark),
         fontFamily: SettingsService.instance.fontFamily,
         scaffoldBackgroundColor: const Color.fromARGB(255, 12, 12, 14),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-        ),
+        appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent, elevation: 0),
       ),
+      themeMode: switch (SettingsService.instance.themeModePreference) {
+        'light' => ThemeMode.light,
+        'system' => ThemeMode.system,
+        _ => ThemeMode.dark,
+      },
       debugShowCheckedModeBanner: false,
       initialRoute: '/boot',
       routes: {
