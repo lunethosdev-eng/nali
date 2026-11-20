@@ -13,6 +13,8 @@ import 'package:nali/screens/spotify_web_import_screen.dart';
 import 'package:nali/screens/listen_together_screen.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/screens/font_manager_screen.dart';
+import 'package:nali/services/account_sessions_service.dart';
+import 'package:nali/screens/account_sessions_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final String? category;
@@ -253,7 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context, _) {
         if (widget.category == null) return _buildCategoryDashboard(s);
         return Scaffold(
-          backgroundColor: s.amoled ? Colors.black : const Color(0xFF0C0C0E),
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           appBar: AppBar(
             title: Text(_categoryTitle(widget.category!)),
             backgroundColor: Colors.transparent,
@@ -263,7 +265,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               if (widget.category == 'appearance') ...[
               // ── IDIOMA ────────────────────────────────────────
+              _section(t('Tema de la aplicación', 'App theme')),
+              LiquidGlass(borderRadius: BorderRadius.circular(14), child: Column(children: [
+                RadioListTile<String>(value: 'dark', groupValue: s.themeModePreference, activeColor: const Color(0xfffc3c44), title: Text(t('Oscuro', 'Dark'), style: const TextStyle(color: Colors.white)), onChanged: (v) => s.setThemeModePreference(v!)),
+                RadioListTile<String>(value: 'light', groupValue: s.themeModePreference, activeColor: const Color(0xfffc3c44), title: Text(t('Claro', 'Light'), style: const TextStyle(color: Colors.white)), onChanged: (v) => s.setThemeModePreference(v!)),
+                RadioListTile<String>(value: 'system', groupValue: s.themeModePreference, activeColor: const Color(0xfffc3c44), title: Text(t('Automático (sistema)', 'System automatic'), style: const TextStyle(color: Colors.white)), onChanged: (v) => s.setThemeModePreference(v!)),
+              ])),
               _section(t('Idioma', 'Language')),
+
               LiquidGlass(
                 borderRadius: BorderRadius.circular(14),
                 child: Column(
@@ -589,6 +598,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onTap: _showPasswordRecovery,
                     ),
                     ListTile(
+                      leading: const Icon(Icons.switch_account_outlined, color: Colors.white70),
+                      title: Text(t('Administrar cuentas', 'Manage accounts'), style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(t('Guardar sesiones y cambiar de cuenta', 'Save sessions and switch accounts'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      trailing: const Icon(Icons.chevron_right, color: Colors.white38),
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountSessionsScreen())),
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.delete_forever_outlined, color: Color(0xffff7777)),
+                      title: Text(t('Eliminar cuenta', 'Delete account'), style: const TextStyle(color: Color(0xffff7777))),
+                      subtitle: Text(t('Requiere una Edge Function protegida', 'Requires a protected Edge Function'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      onTap: _confirmAccountDeletion,
+                    ),
+                    ListTile(
                       leading: const Icon(Icons.logout_rounded, color: Color(0xffff7777)),
                       title: Text(t('Cerrar sesión', 'Sign out'), style: const TextStyle(color: Color(0xffff7777))),
                       onTap: _confirmSignOut,
@@ -851,7 +873,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ('advanced', Icons.tune_rounded, t('Funciones beta y herramientas', 'Beta features and tools'), const Color(0xffb0a0ff)),
     ];
     return Scaffold(
-      backgroundColor: s.amoled ? Colors.black : const Color(0xFF0C0C0E),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: Text(t('Ajustes', 'Settings')), backgroundColor: Colors.transparent),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 36), children: [
         Text(t('Todo en su sitio.', 'Everything in its place.'), style: const TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.w800)),
@@ -874,6 +896,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try { await SupabaseService.updateListeningVisibility(value); }
     catch (error) { if (mounted) setState(() => _showListening = old); if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error'))); }
   }
+
+  Future<void> _confirmAccountDeletion() async {
+    final user = SupabaseService.currentUser;
+    if (user == null || user.email == null) return;
+    final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(t('Eliminar cuenta permanentemente', 'Delete account permanently')),
+      content: Text(t('Esta acción no se puede deshacer. Se verificará tu contraseña y el servidor procesará la eliminación. Si la función no está desplegada, no se eliminará nada.', 'This cannot be undone. Your password will be verified and the server will process deletion. If the function is not deployed, nothing will be deleted.')),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t('Continuar', 'Continue'))],
+    ));
+    if (confirm != true || !mounted) return;
+    final password = TextEditingController();
+    final pin = TextEditingController();
+    final entered = await showDialog<List<String>>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(t('Verificar identidad', 'Verify identity')),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: password, obscureText: true, decoration: InputDecoration(labelText: t('Contraseña actual', 'Current password'))),
+        if (user.email!.toLowerCase() == SupabaseService.reservedEmail) TextField(controller: pin, obscureText: true, decoration: InputDecoration(labelText: t('PIN de seguridad', 'Security PIN'))),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, [password.text, pin.text]), child: Text(t('Verificar', 'Verify'))],
+    ));
+    password.dispose();
+    pin.dispose();
+    if (entered == null || entered[0].isEmpty) return;
+    try {
+      await SupabaseService.signIn(email: user.email!, password: entered[0], pin: entered.length > 1 && entered[1].isNotEmpty ? entered[1] : null);
+      await SupabaseService.deleteCurrentAccount();
+      await AccountSessionsService.instance.clear();
+      if (mounted) Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (_) => false);
+    } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo completar la eliminación: $e'))); }
+  }
+
 
   Future<void> _showPasswordRecovery() async {
     final controller = TextEditingController(text: SupabaseService.currentUser?.email ?? '');
