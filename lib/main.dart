@@ -256,6 +256,17 @@ class _NativePlayerHandoffState extends State<_NativePlayerHandoff> {
     }
   }
 
+
+  Future<void> _retryNative() async {
+    try {
+      setState(() => _error = null);
+      await NativePlayerBridge.instance.invoke<bool>('openNativePlayer');
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: const Color(0xFF0C0C0E),
@@ -269,7 +280,10 @@ class _NativePlayerHandoffState extends State<_NativePlayerHandoff> {
           const SizedBox(height: 8),
           Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white54, fontSize: 12)),
           const SizedBox(height: 12),
-          TextButton(onPressed: () => Navigator.of(context).pushReplacement(MusicPlayer.route(widget.song)), child: const Text('Abrir reproductor Flutter')),
+          TextButton(
+            onPressed: _retryNative,
+            child: const Text('Intentar abrir BitChord de nuevo'),
+          ),
         ] else ...[
           const SizedBox(height: 16),
           const CircularProgressIndicator(color: Color(0xfffc3c44)),
