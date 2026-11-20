@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/spotify_service.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 
-/// Phase 1 – Settings → Proveedores section.
+/// Phase 2 – Complete Settings → Proveedores section.
 ///
-/// Rules:
-/// - Supabase is always on (primary backend). Cannot be disabled.
-/// - YouTube Music starts OFF and only activates when the user turns the switch on.
-/// - Spotify toggle is prepared (real connection handled in later phases).
+/// Rules enforced:
+/// - Supabase is always on (primary backend). Switch is disabled.
+/// - YouTube Music starts OFF. Only the user can turn it on.
+/// - Spotify shows connection status from SpotifyService + enable toggle.
+/// - SoundCloud is shown as coming soon.
 class SettingsProvidersSection extends StatelessWidget {
   const SettingsProvidersSection({super.key});
 
@@ -18,9 +20,15 @@ class SettingsProvidersSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: ProviderService.instance,
+      animation: Listenable.merge([
+        ProviderService.instance,
+        // SpotifyService is not a ChangeNotifier in all versions,
+        // so we rebuild when ProviderService changes (toggle).
+      ]),
       builder: (context, _) {
         final ps = ProviderService.instance;
+        final spotify = SpotifyService.instance;
+        final locale = SettingsService.instance.locale;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -29,113 +37,170 @@ class SettingsProvidersSection extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               t(
-                'Controla qué fuentes de música puede usar Nali. Supabase es siempre la fuente principal.',
-                'Control which music sources Nali can use. Supabase is always the primary source.',
+                'Elige qué fuentes de música puede usar Nali. Supabase es siempre la fuente principal.',
+                'Choose which music sources Nali can use. Supabase is always the primary source.',
               ),
               style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 13),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
 
-            // ── Supabase (always on) ───────────────────────────────
-            LiquidGlass(
-              borderRadius: BorderRadius.circular(14),
-              child: ListTile(
-                leading: const Icon(Icons.cloud_done_rounded, color: Color(0xff6ed6b1)),
-                title: Text(
-                  'Supabase',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  t(
-                    'Servidor principal de Nali · siempre activo',
-                    'Nali primary server · always active',
-                  ),
-                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                ),
-                trailing: Switch(
-                  value: true,
-                  activeColor: const Color(0xff6ed6b1),
-                  onChanged: null, // Cannot be disabled
-                ),
-              ),
+            // ── SUPABASE (always on) ───────────────────────────────
+            _providerCard(
+              icon: Icons.cloud_done_rounded,
+              iconColor: const Color(0xff6ed6b1),
+              title: 'Supabase',
+              subtitle: ps.statusText('supabase', locale: locale),
+              value: true,
+              onChanged: null, // cannot disable
+              trailingLabel: t('Principal', 'Primary'),
             ),
             const SizedBox(height: 10),
 
-            // ── YouTube Music (OFF by default) ─────────────────────
-            LiquidGlass(
-              borderRadius: BorderRadius.circular(14),
-              child: SwitchListTile(
-                secondary: const Icon(Icons.play_circle_outline_rounded, color: Color(0xffff4444)),
-                title: const Text(
-                  'YouTube Music',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  ps.youtubeMusicEnabled
-                      ? t('Activo · resultados incluidos en búsqueda', 'Active · results included in search')
-                      : t('Desactivado · no se consulta su catálogo', 'Disabled · catalog is not queried'),
-                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                ),
-                value: ps.youtubeMusicEnabled,
-                activeColor: const Color(0xffff4444),
-                onChanged: (v) => ps.setYoutubeMusicEnabled(v),
-              ),
+            // ── YOUTUBE MUSIC (OFF by default) ─────────────────────
+            _providerCard(
+              icon: Icons.play_circle_outline_rounded,
+              iconColor: const Color(0xffff4444),
+              title: 'YouTube Music',
+              subtitle: ps.statusText('youtube_music', locale: locale),
+              value: ps.youtubeMusicEnabled,
+              onChanged: (v) => ps.setYoutubeMusicEnabled(v),
             ),
             const SizedBox(height: 10),
 
-            // ── Spotify (prepared) ─────────────────────────────────
-            LiquidGlass(
-              borderRadius: BorderRadius.circular(14),
-              child: SwitchListTile(
-                secondary: const Icon(Icons.library_music_rounded, color: Color(0xFF1DB954)),
-                title: const Text(
-                  'Spotify',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  t(
-                    'Integración preparada · conexión real en fases posteriores',
-                    'Prepared · real connection in later phases',
-                  ),
-                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                ),
-                value: ps.spotifyEnabled,
-                activeColor: const Color(0xFF1DB954),
-                onChanged: (v) => ps.setSpotifyEnabled(v),
-              ),
+            // ── SPOTIFY ────────────────────────────────────────────
+            _providerCard(
+              icon: Icons.library_music_rounded,
+              iconColor: const Color(0xFF1DB954),
+              title: 'Spotify',
+              subtitle: ps.statusText('spotify', locale: locale),
+              value: ps.spotifyEnabled,
+              onChanged: (v) => ps.setSpotifyEnabled(v),
+              extra: spotify.isLinked
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+                      child: Row(
+                        children: [
+                          if (spotify.profileImage != null &&
+                              spotify.profileImage!.isNotEmpty)
+                            CircleAvatar(
+                              radius: 12,
+                              backgroundImage: NetworkImage(spotify.profileImage!),
+                            )
+                          else
+                            const Icon(Icons.person, size: 18, color: Colors.white54),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              spotify.displayName ?? t('Cuenta conectada', 'Linked account'),
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.7),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            t('Conectado', 'Connected'),
+                            style: const TextStyle(
+                              color: Color(0xFF1DB954),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : null,
             ),
             const SizedBox(height: 10),
 
-            // ── SoundCloud (future) ────────────────────────────────
-            LiquidGlass(
-              borderRadius: BorderRadius.circular(14),
-              child: ListTile(
-                leading: Icon(Icons.cloud_queue_rounded, color: Colors.white.withOpacity(0.35)),
-                title: Text(
-                  'SoundCloud',
-                  style: TextStyle(color: Colors.white.withOpacity(0.45), fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  t('Próximamente', 'Coming soon'),
-                  style: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 12),
-                ),
-                trailing: Switch(
-                  value: false,
-                  onChanged: null,
-                ),
-              ),
+            // ── SOUNDCLOUD (future) ────────────────────────────────
+            _providerCard(
+              icon: Icons.cloud_queue_rounded,
+              iconColor: Colors.white38,
+              title: 'SoundCloud',
+              subtitle: t('Próximamente', 'Coming soon'),
+              value: false,
+              onChanged: null,
+              disabled: true,
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
             _infoBox(
               t(
-                'YouTube Music solo se utiliza cuando está activado. Supabase sigue siendo la fuente predeterminada en todo momento.',
-                'YouTube Music is only used when enabled. Supabase remains the default source at all times.',
+                'YouTube Music solo se consulta cuando está activado. '
+                'Supabase sigue siendo la fuente predeterminada en todo momento. '
+                'Desactivar un proveedor no borra tu biblioteca local.',
+                'YouTube Music is only queried when enabled. '
+                'Supabase remains the default source at all times. '
+                'Disabling a provider does not delete your local library.',
               ),
             ),
           ],
         );
       },
+    );
+  }
+
+  Widget _providerCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+    String? trailingLabel,
+    Widget? extra,
+    bool disabled = false,
+  }) {
+    return LiquidGlass(
+      borderRadius: BorderRadius.circular(14),
+      child: Column(
+        children: [
+          SwitchListTile(
+            secondary: Icon(icon, color: disabled ? Colors.white24 : iconColor),
+            title: Text(
+              title,
+              style: TextStyle(
+                color: disabled ? Colors.white38 : Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              subtitle,
+              style: TextStyle(
+                color: Colors.white.withOpacity(disabled ? 0.3 : 0.5),
+                fontSize: 12,
+              ),
+            ),
+            value: value,
+            activeColor: iconColor,
+            onChanged: disabled ? null : onChanged,
+          ),
+          if (trailingLabel != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    trailingLabel,
+                    style: TextStyle(
+                      color: iconColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (extra != null) extra,
+        ],
+      ),
     );
   }
 
