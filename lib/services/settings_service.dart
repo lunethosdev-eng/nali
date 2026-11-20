@@ -7,6 +7,7 @@ class SettingsService extends ChangeNotifier {
   SettingsService._();
 
   // Appearance
+  String themeModePreference = 'dark';
   bool liquidGlassEnabled = true;
   double glassOpacity = 0.14;
   double glassBlur = 24;
@@ -119,6 +120,7 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> load() async {
     final p = await SharedPreferences.getInstance();
+    themeModePreference = p.getString('theme_mode') ?? 'dark';
     liquidGlassEnabled = p.getBool('lg_enabled') ?? true;
     glassOpacity = p.getDouble('lg_opacity') ?? 0.14;
     glassBlur = p.getDouble('lg_blur') ?? 24;
@@ -227,6 +229,12 @@ class SettingsService extends ChangeNotifier {
       'beta_smart_queue',
     };
     return on.contains(id);
+  }
+
+  Future<void> setThemeModePreference(String value) async {
+    if (!['dark', 'light', 'system'].contains(value)) return;
+    themeModePreference = value;
+    await save();
   }
 
   Future<void> setFlag(String id, bool v) async {
@@ -374,6 +382,7 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> save() async {
     final p = await SharedPreferences.getInstance();
+    await p.setString('theme_mode', themeModePreference);
     await p.setBool('lg_enabled', liquidGlassEnabled);
     await p.setDouble('lg_opacity', glassOpacity);
     await p.setDouble('lg_blur', glassBlur);
