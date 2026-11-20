@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:nali/services/supabase_service.dart';
 
-/// MangaDex public search used by profile favorites. No authentication or API key is required.
+/// MangaDex title search for profile favorites. Uses an authenticated Edge proxy first, then the public endpoint fallback.
 class MangaDexService {
   MangaDexService._();
   static final instance = MangaDexService._();
@@ -17,14 +18,18 @@ class MangaDexService {
       'order[relevance]': 'desc',
       'contentRating[]': 'safe',
     });
-    final response = await http.get(uri, headers: const {
-      'Accept': 'application/json',
-      'User-Agent': 'Nali/1.0 (profile favorites)',
-    }).timeout(const Duration(seconds: 15));
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('MangaDex HTTP ${response.statusCode}');
+    dynamic root;
+    // Signed-in users try the same-origin-friendly Edge proxy first. If it is
+    // not deployed yet, fall back to the public API for platforms where CORS allows it.
+    try {
+      final proxy = await SupabaseService.kokoro.functions.invoke('mangadex-search', body: {'query': trimmed, 'limit': limit.clamp(1, 32)});
+      root = proxy.data;
+      if (root is! Map || root['data'] is! List) throw StateError('Unexpected MangaDex proxy response');
+    } catch (_) {
+      final response = await http.get(uri, headers: const {'Accept': 'application/json'}).timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) throw Exception('MangaDex HTTP ${response.statusCode}. El proveedor rechazó la solicitud; intenta más tarde.');
+      root = jsonDecode(response.body);
     }
-    final root = jsonDecode(response.body);
     final data = root is Map ? root['data'] : null;
     if (data is! List) return const [];
     return data.map<Map<String, String?>?>((item) {
