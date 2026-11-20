@@ -1,0 +1,5 @@
+[functions.delete-account]
+verify_jwt = true
+
+[functions.mangadex-search]
+verify_jwt = true
