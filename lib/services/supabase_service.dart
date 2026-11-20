@@ -106,6 +106,13 @@ class SupabaseService {
     await kokoro.auth.signOut();
   }
 
+  /// Invokes the server-side account deletion function; no admin key is held client-side.
+  static Future<void> deleteCurrentAccount() async {
+    final session = kokoro.auth.currentSession;
+    if (session == null) throw StateError('No hay una sesión activa.');
+    await kokoro.functions.invoke('delete-account', headers: {'Authorization': 'Bearer ${session.accessToken}'});
+  }
+
   /// Sends Supabase's password-reset email. The current password is never read
   /// or transmitted by the client.
   static Future<void> sendPasswordRecovery(String email, {String? redirectTo}) async {
