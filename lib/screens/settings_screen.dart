@@ -426,17 +426,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
+              ],
+              if (widget.category == 'canvas') ...[
                 _section(t('Canvas y portadas animadas', 'Canvas and animated covers')),
-                if (NativePreferencesBridge.instance.supported) ...[
-                  LiquidGlass(borderRadius: BorderRadius.circular(14), child: Column(children: [
-                    _canvasSwitch('appleMusic', t('Canvas de Apple Music', 'Apple Music Canvas'), _appleCanvas),
-                    _canvasSwitch('spotify', t('Canvas de Spotify', 'Spotify Canvas'), _spotifyCanvas),
-                    _canvasSwitch('external', t('Fuentes externas', 'External sources'), _externalCanvas),
-                    _canvasSwitch('repeat', t('Repetir Canvas', 'Repeat Canvas'), _canvasRepeat),
-                    _canvasSwitch('animatedCovers', t('Portadas animadas BitChord', 'BitChord animated covers'), _animatedCovers),
-                  ])),
-                ] else
-                  _incompleteNote(t('Los Canvas nativos se controlan desde Android. En web e iOS se conserva el reproductor Flutter.', 'Native Canvas controls are Android-only. Web and iOS keep the Flutter player.')),
+                LiquidGlass(borderRadius: BorderRadius.circular(14), child: Column(children: [
+                  _canvasSwitch('appleMusic', t('Canvas de Apple Music', 'Apple Music Canvas'), _appleCanvas),
+                  _canvasSwitch('spotify', t('Canvas de Spotify', 'Spotify Canvas'), _spotifyCanvas),
+                  _canvasSwitch('external', t('Fuentes externas', 'External sources'), _externalCanvas),
+                  _canvasSwitch('repeat', t('Repetir Canvas', 'Repeat Canvas'), _canvasRepeat),
+                  _canvasSwitch('animatedCovers', t('Portadas animadas BitChord', 'BitChord animated covers'), _animatedCovers),
+                ])),
+                _incompleteNote(t('Las preferencias se guardan en este dispositivo. La reproducción de Canvas depende de la fuente y de las capacidades de la plataforma.', 'Preferences are saved on this device. Canvas playback depends on source and platform capabilities.')),
               ],
               if (widget.category == 'library') ...[
               // ── CACHE ─────────────────────────────────────────
@@ -832,7 +832,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'privacy' => t('Privacidad', 'Privacy'), 'personalization' => t('Personalización', 'Personalization'),
     'playback' => t('Reproducción', 'Playback'), 'lyrics' => t('Letras', 'Lyrics'),
     'library' => t('Biblioteca', 'Library'), 'notifications' => t('Notificaciones', 'Notifications'),
-    'social' => t('Social', 'Social'), 'advanced' => t('Ajustes avanzados', 'Advanced settings'),
+    'social' => t('Social', 'Social'), 'canvas' => t('Canvas', 'Canvas'), 'advanced' => t('Ajustes avanzados', 'Advanced settings'),
     _ => t('Ajustes', 'Settings'),
   };
 
@@ -847,6 +847,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ('library', Icons.library_music_outlined, t('Caché, importación y playlists', 'Cache, imports and playlists'), const Color(0xffa7c77a)),
       ('notifications', Icons.notifications_none_rounded, t('Sonidos y alertas', 'Sounds and alerts'), const Color(0xffffca70)),
       ('social', Icons.people_outline_rounded, t('Escucha compartida y comunidad', 'Shared listening and community'), const Color(0xff7fc4c9)),
+      ('canvas', Icons.movie_outlined, t('Apple Music, Spotify y portadas animadas', 'Apple Music, Spotify and animated covers'), const Color(0xffb0a0ff)),
       ('advanced', Icons.tune_rounded, t('Funciones beta y herramientas', 'Beta features and tools'), const Color(0xffb0a0ff)),
     ];
     return Scaffold(
