@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:nali/services/nali_links.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/mangadex_service.dart';
 // profile theme via SettingsService
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,7 +24,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   final _pronounsCtrl = TextEditingController();
   final _statusCtrl = TextEditingController();
   final _badgesCtrl = TextEditingController();
-  final _mangasCtrl = TextEditingController();
+  final List<Map<String, String?>> _favoriteMangas = [];
   final _linkLabelCtrl = TextEditingController();
   final _linkUrlCtrl = TextEditingController();
   bool _isPublic = true;
@@ -63,7 +64,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _pronounsCtrl.dispose();
     _statusCtrl.dispose();
     _badgesCtrl.dispose();
-    _mangasCtrl.dispose();
     _linkLabelCtrl.dispose();
     _linkUrlCtrl.dispose();
     super.dispose();
@@ -84,8 +84,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       _pronounsCtrl.text = profile['pronouns'] ?? '';
       _statusCtrl.text = profile['status_text'] ?? '';
       _badgesCtrl.text = profile['badges'] ?? '';
-      final rawMangas = profile['favorite_mangas']?.toString() ?? '[]';
-      _mangasCtrl.text = _mangaTitlesFromJson(rawMangas);
+      final mangasValue = profile['favorite_mangas'];
+      final rawMangas = mangasValue is String ? mangasValue : jsonEncode(mangasValue ?? []);
+      _favoriteMangas.clear();
+      try {
+        final decoded = jsonDecode(rawMangas);
+        if (decoded is List) {
+          for (final item in decoded) {
+            if (item is Map && (item['title']?.toString().trim().isNotEmpty ?? false)) {
+              _favoriteMangas.add({
+                'id': item['id']?.toString() ?? '',
+                'title': item['title'].toString(),
+                'cover': item['cover']?.toString(),
+              });
+            }
+          }
+        }
+      } catch (_) {}
       _linkLabelCtrl.text = profile['link_label'] ?? '';
       _linkUrlCtrl.text = profile['link_url'] ?? '';
       _isPublic = profile['is_public'] != false;
@@ -102,32 +117,32 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           ?? SettingsService.instance.profileFrame
           ?? 'none';
     }
-    setState(() => _loading = false);
+    if (mounted) setState(() => _loading = false);
   }
 
-  String _mangaTitlesFromJson(String raw) {
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return '';
-      return decoded.map((item) => item is Map ? (item['title'] ?? '').toString() : '').where((title) => title.trim().isNotEmpty).join(', ');
-    } catch (_) {
-      return '';
-    }
+  String _mangaJsonFromSelected() => jsonEncode(_favoriteMangas.take(12).map((item) => {
+    'id': item['id'] ?? '',
+    'title': item['title'] ?? '',
+    'cover': item['cover'],
+  }).toList());
+
+  Future<void> _showMangaPicker() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _MangaPickerDialog(
+        search: (query) => MangaDexService.instance.search(query),
+        selectedIds: _favoriteMangas.map((m) => m['id'] ?? '').toSet(),
+        onSelect: (item) {
+          if (_favoriteMangas.length >= 12 || _favoriteMangas.any((m) => m['id'] == item['id'])) return;
+          setState(() => _favoriteMangas.add(item));
+        },
+        count: _favoriteMangas.length,
+        onCountChanged: () => setState(() {}),
+        strings: (es, en) => t(es, en),
+      ),
+    );
   }
 
-  String _mangaJsonFromTitles(String raw) {
-    final titles = raw.split(',').map((value) => value.trim()).where((value) => value.isNotEmpty).take(12).toList();
-    final entries = titles.asMap().entries.map((entry) {
-      final title = entry.value;
-      final slug = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-').replaceAll(RegExp(r'^-|-$'), '');
-      return {
-        'id': slug.isEmpty ? 'favorite-${entry.key + 1}' : slug,
-        'title': title,
-        'cover': null,
-      };
-    }).toList();
-    return jsonEncode(entries);
-  }
 
   Future<void> _pickMedia({required bool isAvatar}) async {
     final xfile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
@@ -174,7 +189,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         linkLabel: _linkLabelCtrl.text,
         linkUrl: _linkUrlCtrl.text,
         showListening: _showListening,
-        favoriteMangas: _mangaJsonFromTitles(_mangasCtrl.text),
+        favoriteMangas: _mangaJsonFromSelected(),
       );
       // theme column best-effort
       SettingsService.instance.profileTheme = _theme;
@@ -531,7 +546,20 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               const SizedBox(height: 12),
               _profileField(_badgesCtrl, t('Insignias', 'Badges'), hint: t('Separadas por comas', 'Comma separated')),
               const SizedBox(height: 12),
-              _profileField(_mangasCtrl, t('Mangas favoritos', 'Favorite manga'), hint: t('Títulos separados por comas', 'Titles separated by commas'), maxLines: 2),
+              Text(t('Mangas favoritos', 'Favorite manga'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: _favoriteMangas.map((m) => InputChip(
+                avatar: m['cover'] == null ? const Icon(Icons.book, size: 16) : ClipRRect(borderRadius: BorderRadius.circular(3), child: Image.network(m['cover']!, width: 24, height: 28, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.book, size: 16))),
+                label: Text(m['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
+                onDeleted: () => setState(() => _favoriteMangas.removeWhere((item) => item['id'] == m['id'])),
+                backgroundColor: Colors.white10, labelStyle: const TextStyle(color: Colors.white), deleteIconColor: Colors.white70,
+              )).toList()),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _favoriteMangas.length >= 12 ? null : _showMangaPicker,
+                icon: const Icon(Icons.search),
+                label: Text(t('Buscar y agregar manga (${_favoriteMangas.length}/12)', 'Search and add manga (${_favoriteMangas.length}/12')),
+              ),
               const SizedBox(height: 12),
               _profileField(_linkLabelCtrl, t('Etiqueta del enlace', 'Link label')),
               const SizedBox(height: 12),
@@ -561,4 +589,62 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       ),
     );
   }
+}
+
+
+class _MangaPickerDialog extends StatefulWidget {
+  final Future<List<Map<String, String?>>> Function(String) search;
+  final Set<String> selectedIds;
+  final void Function(Map<String, String?>) onSelect;
+  final int count;
+  final VoidCallback onCountChanged;
+  final String Function(String, String) strings;
+  const _MangaPickerDialog({required this.search, required this.selectedIds, required this.onSelect, required this.count, required this.onCountChanged, required this.strings});
+  @override
+  State<_MangaPickerDialog> createState() => _MangaPickerDialogState();
+}
+
+
+class _MangaPickerDialogState extends State<_MangaPickerDialog> {
+  final _query = TextEditingController();
+  late Set<String> _selectedIds;
+  late int _selectedCount;
+  @override
+  void initState() {
+    super.initState();
+    _selectedIds = Set<String>.from(widget.selectedIds);
+    _selectedCount = widget.count;
+  }
+  List<Map<String, String?>> _results = [];
+  bool _loading = false;
+  String? _error;
+  Future<void> _search() async {
+    final query = _query.text.trim();
+    if (query.length < 2) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final results = await widget.search(query);
+      if (mounted) setState(() { _results = results; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _results = []; _loading = false; });
+    }
+  }
+  @override
+  void dispose() { _query.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    backgroundColor: const Color(0xFF17171B),
+    title: Text(widget.strings('Buscar mangas', 'Search manga'), style: const TextStyle(color: Colors.white)),
+    content: SizedBox(width: 480, height: 420, child: Column(children: [
+      Row(children: [Expanded(child: TextField(controller: _query, autofocus: true, style: const TextStyle(color: Colors.white), decoration: InputDecoration(hintText: widget.strings('Título de manga', 'Manga title'), hintStyle: const TextStyle(color: Colors.white54)), onSubmitted: (_) => _search())), IconButton(onPressed: _loading ? null : _search, icon: const Icon(Icons.search, color: Color(0xfffc3c44)))]),
+      if (_loading) const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()),
+      if (_error != null) Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+      Expanded(child: ListView.builder(itemCount: _results.length, itemBuilder: (_, index) {
+        final item = _results[index];
+        final selected = _selectedIds.contains(item['id']);
+        return ListTile(dense: true, leading: item['cover'] == null ? const Icon(Icons.book_outlined, color: Colors.white54) : ClipRRect(borderRadius: BorderRadius.circular(5), child: Image.network(item['cover']!, width: 40, height: 52, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.book_outlined, color: Colors.white54))), title: Text(item['title'] ?? '', style: const TextStyle(color: Colors.white), maxLines: 2, overflow: TextOverflow.ellipsis), trailing: Icon(selected ? Icons.check_circle : Icons.add_circle_outline, color: selected ? Colors.greenAccent : Colors.white70), onTap: selected || _selectedCount >= 12 ? null : () { widget.onSelect(item); widget.onCountChanged(); setState(() { _selectedIds.add(item['id'] ?? ''); _selectedCount++; }); });
+      })),
+    ])),
+    actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(widget.strings('Cerrar', 'Done')))],
+  );
 }
