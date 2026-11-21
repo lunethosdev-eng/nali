@@ -9,6 +9,7 @@ import 'package:nali/services/native_preferences_bridge.dart';
 import 'package:nali/services/notification_service.dart';
 import 'package:nali/services/audio_cache_service.dart';
 import 'package:nali/services/spotify_service.dart';
+import 'package:nali/screens/settings_providers_section.dart';
 import 'package:nali/screens/spotify_web_import_screen.dart';
 import 'package:nali/screens/listen_together_screen.dart';
 import 'package:nali/widgets/liquid_glass.dart';
@@ -655,8 +656,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _incompleteNote(t('El perfil nativo de Nali ya contiene mangas favoritos, GIF, emblemas, pronombres, enlaces y nameplates. Su migración a la única interfaz Flutter sigue pendiente.', 'Nali native profile already contains favorite manga, GIFs, badges, pronouns, links and nameplates. Porting them into the single Flutter UI remains pending.')),
               ],
               if (widget.category == 'lyrics') ...[
-                _section(t('Letras y proveedores', 'Lyrics and providers')),
-                _incompleteNote(t('El selector nativo de proveedores de letras permanece en BitChord. La preferencia compartida entre Flutter Settings y BitChord aún no está conectada.', 'The native lyrics-provider selector remains in BitChord. A shared preference between Flutter Settings and BitChord is not connected yet.')),
+                _section(t('Catálogo musical', 'Music catalog')),
+                const SettingsProvidersSection(),
+                const SizedBox(height: 20),
+                _section(t('Proveedores de letras', 'Lyrics providers')),
+                _incompleteNote(t('La selección de proveedores de letras y su sincronización con el reproductor BitChord todavía requiere una integración compartida. Los proveedores de catálogo de música de arriba sí guardan su preferencia.', 'Lyrics-provider selection and synchronization with the BitChord player still need a shared integration. Music catalog providers above do save their preferences.')),
               ],
               if (widget.category == 'social') ...[
                 _section(t('Funciones sociales', 'Social features')),
@@ -903,7 +907,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: Text(t('Eliminar cuenta permanentemente', 'Delete account permanently')),
       content: Text(t('Esta acción no se puede deshacer. Se verificará tu contraseña y el servidor procesará la eliminación. Si la función no está desplegada, no se eliminará nada.', 'This cannot be undone. Your password will be verified and the server will process deletion. If the function is not deployed, nothing will be deleted.')),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t('Continuar', 'Continue'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text(t('Continuar', 'Continue')))],
     ));
     if (confirm != true || !mounted) return;
     final password = TextEditingController();
@@ -914,7 +918,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextField(controller: password, obscureText: true, decoration: InputDecoration(labelText: t('Contraseña actual', 'Current password'))),
         if (user.email!.toLowerCase() == SupabaseService.reservedEmail) TextField(controller: pin, obscureText: true, decoration: InputDecoration(labelText: t('PIN de seguridad', 'Security PIN'))),
       ]),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, [password.text, pin.text]), child: Text(t('Verificar', 'Verify'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(t('Cancelar', 'Cancel'))), TextButton(onPressed: () => Navigator.pop(ctx, [password.text, pin.text]), child: Text(t('Verificar', 'Verify')))],
     ));
     password.dispose();
     pin.dispose();
