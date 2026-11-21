@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nali/services/nali_links.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/widgets/liquid_sheet.dart';
@@ -276,7 +277,27 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
     );
   }
 
+  bool get _canDownloadFromNaliServer {
+    final song = _song ?? PlayerController.instance.current;
+    final provider = (song?['provider'] ?? song?['source'] ?? '').toString().toLowerCase();
+    if (provider.isNotEmpty) {
+      return provider == 'supabase' || provider == 'nali' || provider == 'primary';
+    }
+    // Legacy rows loaded directly from Supabase before provider tagging.
+    final id = (song?['id'] ?? '').toString().toLowerCase();
+    final hasAudio = (song?['audio_url'] ?? '').toString().trim().isNotEmpty;
+    return hasAudio && song?['youtube_id'] == null &&
+        song?['soundcloud_id'] == null && !id.startsWith('yt_') &&
+        !id.startsWith('soundcloud:');
+  }
+
   Future<void> _showDownloadSheet() async {
+    if (!_canDownloadFromNaliServer) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(t('Las descargas MP3 solo están disponibles para canciones de Nali.', 'MP3 downloads are only available for Nali catalog songs.')),
+      ));
+      return;
+    }
     final url = _song?['audio_url']?.toString();
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -394,7 +415,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
                 }
               },
             ),
-            ListTile(
+            if (_canDownloadFromNaliServer) ListTile(
               leading: const Icon(Icons.download_rounded, color: Colors.white70),
               title: Text(t('Descargar', 'Download'), style: const TextStyle(color: Colors.white)),
               onTap: () {
@@ -1760,6 +1781,16 @@ Text(
                                           ],
                                         ),
                                       ),
+                                      if ((_song?['provider'] ?? _song?['source']) == 'soundcloud' &&
+                                          (_song?['permalink_url']?.toString().isNotEmpty ?? false))
+                                        TextButton.icon(
+                                          onPressed: () => launchUrl(
+                                            Uri.parse(_song!['permalink_url'].toString()),
+                                            mode: LaunchMode.externalApplication,
+                                          ),
+                                          icon: const Icon(Icons.cloud_rounded, color: Color(0xffff8a50), size: 15),
+                                          label: const Text('SoundCloud', style: TextStyle(color: Color(0xffff8a50), fontSize: 11)),
+                                        ),
                                       TextButton(
                                         onPressed: _followArtist,
                                         style: TextButton.styleFrom(
