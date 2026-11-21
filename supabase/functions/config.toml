@@ -1,3 +1,6 @@
+[functions.soundcloud-catalog]
+verify_jwt = false
+
 [functions.acrcloud-humming]
 verify_jwt = true
 
