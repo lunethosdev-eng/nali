@@ -208,7 +208,7 @@ class SupabaseService {
           .or('title.ilike.%$q%,artist.ilike.%$q%,album.ilike.%$q%')
           .order('created_at', ascending: false)
           .limit(limit);
-      final list = List<Map<String, dynamic>>.from(res);
+      final list = List<Map<String, dynamic>>.from(res).map((row) => { ...row, 'provider': 'supabase', 'source': 'supabase' }).toList();
       if (list.isNotEmpty) return list;
     } catch (_) {}
 
@@ -222,7 +222,7 @@ class SupabaseService {
     return List<Map<String, dynamic>>.from(all).where((s) {
       final hay = '${s['title'] ?? ''} ${s['artist'] ?? ''} ${s['album'] ?? ''}'.toLowerCase();
       return words.every((w) => hay.contains(w));
-    }).take(limit).toList();
+    }).take(limit).map((row) => { ...row, 'provider': 'supabase', 'source': 'supabase' }).toList();
   }
 
   static Future<List<Map<String, dynamic>>> getArtists({int limit = 30}) async {
@@ -231,7 +231,8 @@ class SupabaseService {
   }
 
   static Future<Map<String, dynamic>?> getSongById(String id) async {
-    return await ukiyo.from('songs').select().eq('id', id).maybeSingle();
+    final row = await ukiyo.from('songs').select().eq('id', id).maybeSingle();
+    return row == null ? null : {...row, 'provider': 'supabase', 'source': 'supabase'};
   }
 
   static Future<List<Map<String, dynamic>>> getSongs({int limit = 50}) async {
@@ -240,7 +241,7 @@ class SupabaseService {
         .select()
         .order('created_at', ascending: false)
         .limit(limit);
-    return List<Map<String, dynamic>>.from(res);
+    return List<Map<String, dynamic>>.from(res).map((row) => { ...row, 'provider': 'supabase', 'source': 'supabase' }).toList();
   }
 
   static Future<List<Map<String, dynamic>>> getAnnouncements() async {
