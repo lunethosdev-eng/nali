@@ -661,7 +661,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               if (widget.category == 'social') ...[
                 _section(t('Funciones sociales', 'Social features')),
                 LiquidGlass(borderRadius: BorderRadius.circular(14), child: ListTile(leading: const Icon(Icons.headphones_rounded, color: Color(0xfffc3c44)), title: Text(t('Escuchar juntos', 'Listen together'), style: const TextStyle(color: Colors.white)), subtitle: Text(t('Salas de escucha compartida.', 'Shared listening rooms.'), style: const TextStyle(color: Colors.white54, fontSize: 12)), trailing: const Icon(Icons.chevron_right, color: Colors.white38), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ListenTogetherScreen())))),
-                _incompleteNote(t('Chat, historias y mapa de amigos todavía no están expuestos desde la navegación Flutter principal.', 'Chat, stories and friends map are not yet exposed from the main Flutter navigation.')),
+                _incompleteNote(t('Chat, mapa de amigos e historias están integrados en la navegación Android nativa de Nali. Activa Chats experimentales para acceder; el chat refresca la conversación abierta cada 3.5 s. La integración Flutter separada aún no está disponible.', 'Chat, friends map and stories are integrated in Nali’s native Android navigation. Enable Experimental Chats to access them; the open chat refreshes every 3.5 s. A separate Flutter integration is not available yet.')),
               ],
               if (widget.category == 'notifications') ...[
               _section(t('Notificaciones', 'Notifications')),
