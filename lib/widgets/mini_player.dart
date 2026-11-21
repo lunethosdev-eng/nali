@@ -93,8 +93,13 @@ class _MiniPlayerState extends State<MiniPlayer> {
         await NativePlayerBridge.instance.invoke('openNativePlayer');
         return; // Success → do not open Flutter player
       } catch (e) {
-        debugPrint('Native BitChord open failed, falling back to Flutter: $e');
-        // Only fall through to Flutter if native truly failed
+        debugPrint('Native BitChord open failed: $e');
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('No se pudo abrir el reproductor Kotlin: $e'),
+          ));
+        }
+        return;
       }
     }
 
