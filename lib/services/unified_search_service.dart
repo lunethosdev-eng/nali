@@ -4,13 +4,18 @@ import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/youtube_catalog_service.dart';
 import 'package:nali/services/soundcloud_catalog_service.dart';
+import 'package:nali/services/music_discovery_service.dart';
+import 'package:nali/services/custom_provider_service.dart';
+import 'package:nali/services/spotify_service.dart';
 
 /// Unified search for Nali (Phase 4).
 ///
 /// Rules:
 /// - Supabase is always queried (primary source).
 /// - YouTube Music is queried ONLY when ProviderService.youtubeMusicEnabled.
-/// - SoundCloud is queried only when enabled.
+/// - SoundCloud resolves public permalinks; global search needs a Client ID.
+// - Apple/iTunes and Deezer provide official short previews when enabled.
+// - Custom providers are queried only when configured by the user.
 /// - The MP3 download server is deliberately excluded from catalog search.
 /// - Results are tagged with `provider` / `source`.
 /// - Supports autocomplete with debounce + cancellation of in-flight requests.
@@ -99,10 +104,41 @@ class UnifiedSearchService {
       return UnifiedSearchResult.empty(q);
     }
 
+    List<Map<String, dynamic>> spotifyResults = [];
+    if (ps.shouldQuerySpotify) {
+      onStatus?.call('Spotify…');
+      spotifyResults = await SpotifyService.instance.searchTracks(q, limit: limitPerProvider);
+    }
+    if (token != _searchToken) return UnifiedSearchResult.empty(q);
+
+    final discoveryFutures = <Future<List<Map<String, dynamic>>>>[];
+    if (ps.shouldQueryAppleMusic) {
+      onStatus?.call('Apple Music…');
+      discoveryFutures.add(MusicDiscoveryService.instance.search('apple', q, limit: limitPerProvider));
+    }
+    if (ps.shouldQueryDeezer) {
+      onStatus?.call('Deezer…');
+      discoveryFutures.add(MusicDiscoveryService.instance.search('deezer', q, limit: limitPerProvider));
+    }
+    List<Map<String, dynamic>> discoveryResults = [];
+    if (discoveryFutures.isNotEmpty) {
+      try { discoveryResults = (await Future.wait(discoveryFutures)).expand((items) => items).toList(); }
+      catch (e) { debugPrint('UnifiedSearch discovery error: $e'); }
+    }
+    if (token != _searchToken) return UnifiedSearchResult.empty(q);
+
+    List<Map<String, dynamic>> customResults = [];
+    try { customResults = await CustomProviderService.instance.searchMusic(q, limit: limitPerProvider); }
+    catch (e) { debugPrint('UnifiedSearch custom providers error: $e'); }
+    if (token != _searchToken) return UnifiedSearchResult.empty(q);
+
     final merged = _mergeResults([
       supabaseResults,
       youtubeResults,
       soundCloudResults,
+      spotifyResults,
+      discoveryResults,
+      customResults,
     ]);
 
     return UnifiedSearchResult(
@@ -110,7 +146,7 @@ class UnifiedSearchService {
       all: merged,
       supabase: supabaseResults,
       youtube: youtubeResults,
-      remote: soundCloudResults,
+      remote: [...youtubeResults, ...soundCloudResults, ...spotifyResults, ...discoveryResults, ...customResults],
     );
   }
 
@@ -169,6 +205,18 @@ class UnifiedSearchService {
           );
           suggestions.addAll(sc);
         } catch (_) {}
+      }
+      if (token != _searchToken) return;
+      if (ProviderService.instance.shouldQuerySpotify && suggestions.length < limit) {
+        try { suggestions.addAll(await SpotifyService.instance.searchTracks(q, limit: limit - suggestions.length)); } catch (_) {}
+      }
+      if (token != _searchToken) return;
+      if (ProviderService.instance.shouldQueryAppleMusic && suggestions.length < limit) {
+        try { suggestions.addAll(await MusicDiscoveryService.instance.search('apple', q, limit: limit - suggestions.length)); } catch (_) {}
+      }
+      if (token != _searchToken) return;
+      if (ProviderService.instance.shouldQueryDeezer && suggestions.length < limit) {
+        try { suggestions.addAll(await MusicDiscoveryService.instance.search('deezer', q, limit: limit - suggestions.length)); } catch (_) {}
       }
       if (token != _searchToken) return;
       onResults(suggestions.take(limit).toList());
