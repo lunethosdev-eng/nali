@@ -111,6 +111,25 @@ class _SpotifyWebImportScreenState extends State<SpotifyWebImportScreen> {
       _hint = t('Extrayendo…', 'Extracting…');
     });
     try {
+      // Spotify's playlist DOM is virtualized: only rows near the viewport may
+      // exist immediately after page load. Scroll the playlist before reading it.
+      for (var pass = 0; pass < 6; pass++) {
+        await _ctrl.runJavaScript('''
+          (function(){
+            var candidates = Array.from(document.querySelectorAll('[data-testid="tracklist-row"], [role="row"]'));
+            var scroller = candidates[0] && candidates[0].parentElement;
+            for (var i=0; i<8 && scroller && scroller.parentElement; i++) {
+              if (scroller.scrollHeight > scroller.clientHeight + 100) break;
+              scroller = scroller.parentElement;
+            }
+            if (scroller) scroller.scrollTop = scroller.scrollHeight;
+            window.scrollTo(0, document.body.scrollHeight);
+          })();
+        ''');
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
+      await _ctrl.runJavaScript('window.scrollTo(0, 0)');
+      await Future<void>.delayed(const Duration(milliseconds: 250));
       final raw = await _ctrl.runJavaScriptReturningResult(_extractJs);
       var text = raw.toString();
       // Android may wrap result in quotes
