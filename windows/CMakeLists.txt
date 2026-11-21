@@ -2,6 +2,12 @@
 cmake_minimum_required(VERSION 3.14)
 project(musicplayer LANGUAGES CXX)
 
+# Visual Studio 18 / MSVC 14.51 rejects deprecated experimental coroutine headers
+# still included by some Flutter plugins. Keep the compatibility macro global.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "nali")
