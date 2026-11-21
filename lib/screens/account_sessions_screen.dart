@@ -47,7 +47,7 @@ class _AccountSessionsScreenState extends State<AccountSessionsScreen> {
         leading: const Icon(Icons.account_circle), title: Text(a['email'] ?? 'Cuenta'), subtitle: Text(current ? 'Cuenta actual' : 'Sesión guardada'),
         trailing: current ? const Icon(Icons.check_circle) : IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Quitar cuenta guardada', onPressed: () async { await AccountSessionsService.instance.remove(a['userId'] ?? ''); await _refresh(); }),
         onTap: current ? null : () async { try { await AccountSessionsService.instance.switchTo(a['refreshToken'] ?? ''); if (mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cuenta cambiada.'))); await _refresh(); } } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al cambiar cuenta: $e'))); } },
-      ))}),
+      )); }),
       const SizedBox(height: 12), FilledButton.icon(onPressed: _addAccount, icon: const Icon(Icons.person_add_alt_1), label: const Text('Agregar cuenta')),
     ]),
   );
