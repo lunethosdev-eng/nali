@@ -91,8 +91,10 @@
         <activity
             android:name="com.pokke.music.ui.player.BitChordPlayerActivity"
             android:exported="false"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="true"
             android:theme="@style/NormalTheme"
-            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|uiMode" />
+            android:configChanges="orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|uiMode" />
         <activity android:name="com.pokke.music.ui.pairing.PairDeviceActivity" android:exported="true" android:theme="@android:style/Theme.Material.Light.NoActionBar">
             <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="pokke" android:host="pair"/></intent-filter>
         </activity>
