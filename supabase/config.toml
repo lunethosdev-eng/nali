@@ -1,0 +1,24 @@
+# Edge Function authentication mirrors the deployed Supabase project.
+[functions.review-plugin]
+verify_jwt = false
+
+[functions.soundcloud-catalog]
+verify_jwt = true
+
+[functions.youtube-music-catalog]
+verify_jwt = true
+
+[functions.music-discovery]
+verify_jwt = true
+
+[functions.mangadex-search]
+verify_jwt = false
+
+[functions.acrcloud-humming]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.soundcloud-link]
+verify_jwt = true
