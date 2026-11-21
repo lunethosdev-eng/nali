@@ -1,23 +1,76 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, apikey, content-type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: cors });
-  const auth = req.headers.get('Authorization') ?? '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  const url = Deno.env.get('SUPABASE_URL'); const anon = Deno.env.get('SUPABASE_ANON_KEY');
-  if (!token || !url || !anon) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } });
-  const client = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
-  const { data: authData, error: authError } = await client.auth.getUser(token);
-  if (authError || !authData.user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } });
-  let body: { query?: string; limit?: number };
-  try { body = await req.json(); } catch { return new Response(JSON.stringify({ error: 'Invalid JSON' }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } }); }
-  const query = (body.query ?? '').trim(); const limit = Math.max(1, Math.min(32, Number(body.limit ?? 12)));
-  if (query.length < 2 || query.length > 100) return new Response(JSON.stringify({ error: 'Query length invalid' }), { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } });
-  const mangaUrl = new URL('https://api.mangadex.org/manga');
-  mangaUrl.searchParams.set('title', query); mangaUrl.searchParams.set('limit', String(limit)); mangaUrl.searchParams.append('includes[]', 'cover_art'); mangaUrl.searchParams.set('order[relevance]', 'desc'); mangaUrl.searchParams.append('contentRating[]', 'safe');
-  const upstream = await fetch(mangaUrl, { headers: { Accept: 'application/json', 'User-Agent': 'Nali/1.0 (https://github.com/lunethosdev-eng/Nali)' } });
-  if (!upstream.ok) return new Response(JSON.stringify({ error: `MangaDex upstream ${upstream.status}` }), { status: 502, headers: { ...cors, 'Content-Type': 'application/json' } });
-  const data = await upstream.json();
-  return new Response(JSON.stringify(data), { status: 200, headers: { ...cors, 'Content-Type': 'application/json' } });
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+const json = (body: unknown, status = 200) => Response.json(body, {
+  status, headers: { ...CORS, "Cache-Control": "public, max-age=90" },
+});
+
+async function aniListFallback(query: string, limit: number) {
+  const graphql = `query ($search: String, $perPage: Int) {
+    Page(perPage: $perPage) {
+      media(search: $search, type: MANGA, sort: SEARCH_MATCH) {
+        id title { romaji english native } coverImage { large }
+      }
+    }
+  }`;
+  const response = await fetch("https://graphql.anilist.co", {
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ query: graphql, variables: { search: query, perPage: limit } }),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error(`AniList HTTP ${response.status}`);
+  const payload = await response.json();
+  const rows = payload?.data?.Page?.media;
+  if (!Array.isArray(rows)) throw new Error("AniList returned no manga list");
+  return rows.map((row: Record<string, unknown>) => {
+    const titles = row.title && typeof row.title === "object" ? row.title as Record<string, unknown> : {};
+    const cover = row.coverImage && typeof row.coverImage === "object" ? row.coverImage as Record<string, unknown> : {};
+    return {
+      id: `anilist:${row.id}`,
+      attributes: { title: { en: titles.english ?? titles.romaji, romaji: titles.romaji }, coverUrl: cover.large ?? null },
+      relationships: [],
+    };
+  });
+}
+
+Deno.serve(async (request: Request) => {
+  if (request.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+  try {
+    const body = await request.json();
+    const query = String(body?.query ?? "").trim();
+    const limit = Math.max(1, Math.min(32, Number(body?.limit) || 12));
+    if (query.length < 2 || query.length > 100) return json({ error: "invalid_query" }, 400);
+
+    const url = new URL("https://api.mangadex.org/manga");
+    url.searchParams.set("title", query);
+    url.searchParams.set("limit", String(limit));
+    url.searchParams.append("includes[]", "cover_art");
+    url.searchParams.set("order[relevance]", "desc");
+    url.searchParams.append("contentRating[]", "safe");
+
+    // MangaDex may reject cloud egress IPs with 403. Retry once with a normal
+    // browser UA; if still blocked, provide an explicit AniList fallback.
+    let upstream = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "Nali/1.1 (https://github.com/lunethosdev-eng/nali)" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (upstream.status === 403 || upstream.status === 429) {
+      upstream = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (compatible; Nali/1.1)" },
+        signal: AbortSignal.timeout(12000),
+      });
+    }
+    if (upstream.ok) {
+      const payload = await upstream.json();
+      if (Array.isArray(payload?.data)) return json({ ...payload, provider: "mangadex" });
+    }
+    const fallback = await aniListFallback(query, limit);
+    return json({ data: fallback, provider: "anilist_fallback", warning: `MangaDex HTTP ${upstream.status}; se usó AniList.` });
+  } catch (error) {
+    return json({ error: "manga_search_unavailable", detail: String(error).slice(0, 180) }, 502);
+  }
 });
