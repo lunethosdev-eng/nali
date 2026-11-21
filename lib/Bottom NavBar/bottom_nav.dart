@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import 'package:nali/pages/browse_page.dart';
@@ -12,6 +13,7 @@ import 'package:nali/widgets/headphone_banner.dart';
 import 'package:nali/services/headphone_service.dart';
 import 'package:nali/services/settings_service.dart';
 import 'package:nali/services/player_controller.dart';
+import 'package:nali/services/supabase_service.dart';
 
 class FirstPage extends StatefulWidget {
   FirstPage({super.key});
@@ -28,6 +30,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
   double _velocity = 0;
   double _prevX = 0;
   String? _headphoneDevice;
+  late Future<Map<String, dynamic>?> _desktopProfileFuture;
 
   bool _navCollapsed = false;
   late AnimationController _collapseCtrl;
@@ -58,6 +61,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    _desktopProfileFuture = SupabaseService.getProfile();
     _bubbleCtrl =
         AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
     _bubbleScale =
@@ -66,10 +70,12 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 380),
     );
-    HeadphoneService.instance.start();
-    HeadphoneService.instance.onConnected.listen((name) {
-      if (mounted) setState(() => _headphoneDevice = name);
-    });
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      HeadphoneService.instance.start();
+      HeadphoneService.instance.onConnected.listen((name) {
+        if (mounted) setState(() => _headphoneDevice = name);
+      });
+    }
   }
 
   @override
@@ -197,12 +203,140 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
     );
   }
 
+  Widget _desktopNavItem(int index) {
+    final selected = _selectedIndex == index;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: Material(
+        color: selected ? const Color(0x22fc3c44) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() => _selectedIndex = index),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(children: [
+              Icon(_icons[index], size: 20,
+                  color: selected ? const Color(0xfffc3c44) : Colors.white70),
+              const SizedBox(width: 13),
+              Text(_labels[index], style: TextStyle(
+                color: selected ? Colors.white : Colors.white70,
+                fontSize: 13,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              )),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xff0c0c0e),
+      body: Row(children: [
+        Container(
+          width: 224,
+          decoration: const BoxDecoration(
+            color: Color(0xff101013),
+            border: Border(right: BorderSide(color: Colors.white10)),
+          ),
+          child: SafeArea(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(25, 25, 20, 28),
+                child: Row(children: [
+                  Icon(Icons.graphic_eq_rounded, color: Color(0xfffc3c44), size: 27),
+                  SizedBox(width: 10),
+                  Text('NALI', style: TextStyle(color: Colors.white,
+                    fontSize: 19, fontWeight: FontWeight.w900, letterSpacing: 2.2)),
+                ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(25, 0, 20, 9),
+                child: Text('YOUR SPACE', style: TextStyle(color: Colors.white38,
+                  fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+              ),
+              for (final i in const [0, 4, 3, 1, 2]) _desktopNavItem(i),
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Divider(color: Colors.white.withOpacity(0.08)),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 18),
+                child: ListTile(
+                  dense: true,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  leading: const Icon(Icons.settings_outlined, color: Colors.white70),
+                  title: const Text('Settings', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  onTap: () => Navigator.pushNamed(context, '/settings'),
+                ),
+              ),
+            ],
+          )),
+        ),
+        Expanded(child: Stack(children: [
+          Positioned.fill(child: _pages[_selectedIndex]),
+          Positioned(
+            top: 12, right: 22,
+            child: SafeArea(child: GestureDetector(
+              onTap: () => Navigator.pushNamed(context, '/profile_edit'),
+              child: FutureBuilder<Map<String, dynamic>?>(
+                future: _desktopProfileFuture,
+                builder: (context, snapshot) {
+                  final avatar = snapshot.data?['avatar_url']?.toString();
+                  return Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: CircleAvatar(
+                      radius: 17,
+                      backgroundColor: const Color(0xff242428),
+                      backgroundImage: avatar != null && avatar.isNotEmpty
+                          ? NetworkImage(avatar)
+                          : null,
+                      child: avatar == null || avatar.isEmpty
+                          ? const Icon(Icons.person_outline_rounded,
+                              color: Colors.white70, size: 19)
+                          : null,
+                    ),
+                  );
+                },
+              ),
+            )),
+          ),
+          Positioned(
+            left: 22, right: 22, bottom: 16,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 920),
+                child: const MiniPlayer(compact: false),
+              ),
+            ),
+          ),
+        ])),
+      ]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final showLabels = SettingsService.instance.navLabels &&
         SettingsService.instance.flag('nav_labels', def: true);
 
-    return Stack(
+    return LayoutBuilder(builder: (context, constraints) {
+      final nativeDesktop = !kIsWeb && (defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS);
+      final webDesktop = kIsWeb && constraints.maxWidth >= 1100 &&
+          defaultTargetPlatform != TargetPlatform.android &&
+          defaultTargetPlatform != TargetPlatform.iOS;
+      if (nativeDesktop || webDesktop) return _buildDesktopLayout(context);
+      return Stack(
       children: [
         Scaffold(
           extendBody: true,
@@ -401,6 +535,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
           ),
       ],
     );
+    });
   }
 }
 
