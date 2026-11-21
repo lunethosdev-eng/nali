@@ -8,8 +8,6 @@ import 'package:nali/services/settings_service.dart';
 import 'package:nali/services/follow_service.dart';
 import 'package:nali/services/player_controller.dart';
 import 'package:nali/services/notification_service.dart';
-import 'package:nali/services/provider_service.dart';
-import 'package:nali/services/unified_search_service.dart';
 
 class HomePage extends StatefulWidget {
   HomePage({super.key});
@@ -22,11 +20,11 @@ class _HomePageState extends State<HomePage> {
   final _scrollCtrl = ScrollController();
   bool _collapsed = false;
   List<Map<String, dynamic>> _forYou = [];
+  List<Map<String, dynamic>> _catalog = [];
   List<Map<String, dynamic>> _trending = [];
   List<Map<String, dynamic>> _recent = [];
   List<Map<String, dynamic>> _popular = [];
   List<Map<String, dynamic>> _followedArtists = [];
-  List<Map<String, dynamic>> _newReleases = [];
   bool _loading = true;
   String? _loadError;
 
@@ -47,76 +45,76 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _load() async {
     if (mounted) setState(() { _loading = true; _loadError = null; });
+
+    // Paint the exact same source Browse uses before awaiting history, follows,
+    // or analytics. Optional endpoints must never keep a valid catalog hidden.
+    List<Map<String, dynamic>> all;
     try {
-      final all = await SupabaseService.getSongs(limit: 100);
-      final history = await ListeningHistory.instance.recent(limit: 24);
-      final topArtists = await ListeningHistory.instance.topArtistNames(limit: 10);
-      final followed = await FollowService.list();
-
-      // Personal recommendations prefer Nali's own catalog. If it is sparse,
-      // query only the external providers the user explicitly enabled.
-      List<Map<String, dynamic>> forYou = [];
-      if (topArtists.isNotEmpty) {
-        for (final artist in topArtists.take(4)) {
-          forYou.addAll(all.where((song) => (song['artist'] ?? '').toString().toLowerCase().contains(artist.toLowerCase())));
-        }
-      }
-      if (forYou.isEmpty) forYou = List<Map<String, dynamic>>.from(all);
-      if (forYou.length < 8 && (ProviderService.instance.shouldQueryYoutube || ProviderService.instance.shouldQuerySoundCloud)) {
-        final tastes = <String>{...topArtists.take(3), ...followed.take(3).map((a) => (a['artist_name'] ?? a['name'] ?? '').toString())};
-        for (final taste in tastes.where((v) => v.trim().isNotEmpty).take(4)) {
-          final result = await UnifiedSearchService.instance.search(taste, limitPerProvider: 8);
-          forYou.addAll(result.all);
-        }
-        if (forYou.isEmpty) {
-          final discovery = await UnifiedSearchService.instance.search('popular songs', limitPerProvider: 18);
-          forYou.addAll(discovery.all);
-        }
-      }
-      forYou = _dedup(forYou);
-
-      final allTimeCounts = <String, int>{};
-      final dailyCounts = <String, int>{};
-      try {
-        final rows = await SupabaseService.kokoro
-            .from('song_plays').select('song_id, created_at')
-            .order('created_at', ascending: false).limit(1200);
-        final since = DateTime.now().subtract(const Duration(days: 1));
-        for (final row in List<Map<String, dynamic>>.from(rows)) {
-          final id = (row['song_id'] ?? '').toString();
-          if (id.isEmpty) continue;
-          allTimeCounts[id] = (allTimeCounts[id] ?? 0) + 1;
-          final created = DateTime.tryParse((row['created_at'] ?? '').toString());
-          if (created != null && created.isAfter(since)) {
-            dailyCounts[id] = (dailyCounts[id] ?? 0) + 1;
-          }
-        }
-      } catch (_) {
-        // Keep Home usable when analytics table/RLS is unavailable.
-      }
-      List<Map<String, dynamic>> sortByCount(Map<String, int> counts) {
-        final rows = List<Map<String, dynamic>>.from(all);
-        rows.sort((a, b) => (counts[(b['id'] ?? '').toString()] ?? 0)
-            .compareTo(counts[(a['id'] ?? '').toString()] ?? 0));
-        return rows.where((song) => (counts[(song['id'] ?? '').toString()] ?? 0) > 0).toList();
-      }
-      final popular = sortByCount(dailyCounts);
-      final trending = sortByCount(allTimeCounts);
-      final newest = List<Map<String, dynamic>>.from(all); // getSongs is already newest-first.
-
-      if (!mounted) return;
-      setState(() {
-        _forYou = forYou;
-        _trending = trending;
-        _recent = history;
-        _popular = popular.take(30).toList();
-        _newReleases = newest.take(24).toList();
-        _followedArtists = followed;
-      });
+      all = await SupabaseService.getSongs(limit: 100)
+          .timeout(const Duration(seconds: 12));
     } catch (error) {
-      if (mounted) setState(() => _loadError = error.toString());
+      if (!mounted) return;
+      setState(() { _loadError = error.toString(); _loading = false; });
+      return;
     }
-    if (mounted) setState(() => _loading = false);
+    if (!mounted) return;
+    setState(() {
+      _catalog = all;
+      _forYou = [];
+      _loading = false;
+    });
+
+    // These enrichments are deliberately isolated and bounded. A missing RLS
+    // policy, empty history, or slow analytics query cannot blank the Home.
+    List<Map<String, dynamic>> history = [];
+    List<String> topArtists = [];
+    List<Map<String, dynamic>> followed = [];
+    try { history = await ListeningHistory.instance.recent(limit: 24).timeout(const Duration(seconds: 5)); } catch (_) {}
+    try { topArtists = await ListeningHistory.instance.topArtistNames(limit: 10).timeout(const Duration(seconds: 5)); } catch (_) {}
+    try { followed = await FollowService.list().timeout(const Duration(seconds: 5)); } catch (_) {}
+
+    List<Map<String, dynamic>> forYou = [];
+    if (topArtists.isNotEmpty) {
+      for (final artist in topArtists.take(4)) {
+        forYou.addAll(all.where((song) =>
+          (song['artist'] ?? '').toString().toLowerCase().contains(artist.toLowerCase())));
+      }
+    }
+    forYou = _dedup(forYou);
+
+    final allTimeCounts = <String, int>{};
+    final dailyCounts = <String, int>{};
+    try {
+      final rows = await SupabaseService.kokoro.from('song_plays')
+          .select('song_id, created_at')
+          .order('created_at', ascending: false).limit(1200)
+          .timeout(const Duration(seconds: 4));
+      final since = DateTime.now().subtract(const Duration(days: 1));
+      for (final row in List<Map<String, dynamic>>.from(rows)) {
+        final id = (row['song_id'] ?? '').toString();
+        if (id.isEmpty) continue;
+        allTimeCounts[id] = (allTimeCounts[id] ?? 0) + 1;
+        final created = DateTime.tryParse((row['created_at'] ?? '').toString());
+        if (created != null && created.isAfter(since)) dailyCounts[id] = (dailyCounts[id] ?? 0) + 1;
+      }
+    } catch (_) {}
+
+    List<Map<String, dynamic>> sortByCount(Map<String, int> counts) {
+      final rows = List<Map<String, dynamic>>.from(all);
+      rows.sort((a, b) => (counts[(b['id'] ?? '').toString()] ?? 0)
+          .compareTo(counts[(a['id'] ?? '').toString()] ?? 0));
+      return rows.where((song) => (counts[(song['id'] ?? '').toString()] ?? 0) > 0).toList();
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _catalog = all;
+      _forYou = forYou;
+      _trending = sortByCount(allTimeCounts);
+      _recent = history;
+      _popular = sortByCount(dailyCounts).take(30).toList();
+      _followedArtists = followed;
+    });
   }
 
   List<Map<String, dynamic>> _dedup(List<Map<String, dynamic>> list) {
@@ -295,12 +293,12 @@ class _HomePageState extends State<HomePage> {
                           _hList(_trending),
                           const SizedBox(height: 22),
                         ],
-                        if (_newReleases.isNotEmpty) ...[
-                          _sectionTitle(t('Novedades', 'New releases')),
-                          _hList(_newReleases),
+                        if (_catalog.isNotEmpty) ...[
+                          _sectionTitle(t('Catálogo de Nali', 'Nali catalog')),
+                          _hList(_catalog),
                           const SizedBox(height: 22),
                         ],
-                        if (_forYou.isEmpty && _recent.isEmpty && _trending.isEmpty)
+                        if (_catalog.isEmpty && _forYou.isEmpty && _recent.isEmpty && _trending.isEmpty)
                           _homeEmptyState(),
                         // Followed artists only
                         _sectionTitle(t('Artistas que sigues', 'Artists you follow')),
