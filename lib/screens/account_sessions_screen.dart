@@ -37,18 +37,70 @@ class _AccountSessionsScreenState extends State<AccountSessionsScreen> {
     } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('No se pudo agregar: $e'))); }
     email.dispose(); password.dispose(); pin.dispose();
   }
+  Widget _accountTile(Map<String, String> account) {
+    final userId = account['userId'] ?? '';
+    final isCurrent = userId == SupabaseService.currentUser?.id;
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.account_circle),
+        title: Text(account['email'] ?? 'Cuenta'),
+        subtitle: Text(isCurrent ? 'Cuenta actual' : 'Sesión guardada'),
+        trailing: isCurrent
+            ? const Icon(Icons.check_circle)
+            : IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Quitar cuenta guardada',
+                onPressed: () async {
+                  await AccountSessionsService.instance.remove(userId);
+                  await _refresh();
+                },
+              ),
+        onTap: isCurrent
+            ? null
+            : () async {
+                try {
+                  await AccountSessionsService.instance.switchTo(
+                    account['refreshToken'] ?? '',
+                  );
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cuenta cambiada.')),
+                  );
+                  await _refresh();
+                } catch (error) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error al cambiar cuenta: $error')),
+                  );
+                }
+              },
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Administrar cuentas')),
-    body: _loading ? const Center(child: CircularProgressIndicator()) : ListView(padding: const EdgeInsets.all(16), children: [
-      const Text('Las sesiones guardadas se almacenan en el almacén seguro del dispositivo. Al cambiar de cuenta, Nali restaura la sesión mediante su token de renovación.', style: TextStyle(color: Colors.grey)),
-      const SizedBox(height: 12),
-      ..._accounts.map((a) { final current = a['userId'] == SupabaseService.currentUser?.id; return Card(child: ListTile(
-        leading: const Icon(Icons.account_circle), title: Text(a['email'] ?? 'Cuenta'), subtitle: Text(current ? 'Cuenta actual' : 'Sesión guardada'),
-        trailing: current ? const Icon(Icons.check_circle) : IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Quitar cuenta guardada', onPressed: () async { await AccountSessionsService.instance.remove(a['userId'] ?? ''); await _refresh(); }),
-        onTap: current ? null : () async { try { await AccountSessionsService.instance.switchTo(a['refreshToken'] ?? ''); if (mounted) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cuenta cambiada.'))); await _refresh(); } } catch (e) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error al cambiar cuenta: $e'))); } },
-      )); }),
-      const SizedBox(height: 12), FilledButton.icon(onPressed: _addAccount, icon: const Icon(Icons.person_add_alt_1), label: const Text('Agregar cuenta')),
-    ]),
-  );
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Administrar cuentas')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text(
+                  'Las sesiones guardadas se almacenan en el almacén seguro del dispositivo. Al cambiar de cuenta, Nali restaura la sesión mediante su token de renovación.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const SizedBox(height: 12),
+                ..._accounts.map(_accountTile),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: _addAccount,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Agregar cuenta'),
+                ),
+              ],
+            ),
+    );
+  }
 }
