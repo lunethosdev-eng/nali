@@ -1,6 +1,3 @@
-[functions.soundcloud-catalog]
-verify_jwt = false
-
 [functions.acrcloud-humming]
 verify_jwt = true
 
@@ -8,4 +5,13 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.mangadex-search]
+verify_jwt = true
+
+[functions.youtube-music-catalog]
+verify_jwt = true
+
+[functions.soundcloud-link]
+verify_jwt = true
+
+[functions.soundcloud-catalog]
 verify_jwt = true
