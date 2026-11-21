@@ -6,13 +6,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/account_sessions_service.dart';
 import 'package:nali/services/listening_history.dart';
 import 'package:nali/services/spotify_service.dart';
 import 'package:nali/services/player_controller.dart';
 import 'package:nali/services/local_music_service.dart';
 import 'package:nali/services/notification_service.dart';
-import 'package:nali/services/headphone_service.dart';
 import 'package:nali/services/media_audio_handler.dart';
 import 'package:app_links/app_links.dart';
 import 'package:nali/screens/auth_screen.dart';
@@ -50,6 +50,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseService.init();
   await SettingsService.instance.load();
+  await ProviderService.instance.load();
   await FontManagerService.instance.applySavedFont();
   await ListeningHistory.instance.load();
   // Spotify disabled (no Premium)
@@ -60,10 +61,10 @@ void main() async {
   NotificationService.instance.refreshFromFollows();
   // Android's Media3 PlaybackService owns the one native MediaSession.
   // Starting audio_service as well would create a second notification/session.
-  if (!kIsWeb && defaultTargetPlatform != TargetPlatform.android) {
+  if (!kIsWeb && (defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS)) {
     await initMediaAudioService();
   }
-  unawaited(HeadphoneService.instance.start());
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
