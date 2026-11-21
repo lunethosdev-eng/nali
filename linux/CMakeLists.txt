@@ -2,12 +2,16 @@
 cmake_minimum_required(VERSION 3.10)
 project(runner LANGUAGES CXX)
 
+# flutter_secure_storage_linux 1.2.x vendors nlohmann/json headers that emit
+# deprecated-literal-operator warnings; do not promote that third-party warning to an error.
+add_compile_options(-Wno-error=deprecated-literal-operator)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "musicplayer")
+set(BINARY_NAME "nali")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.example.musicplayer")
+set(APPLICATION_ID "com.pokke.app")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
