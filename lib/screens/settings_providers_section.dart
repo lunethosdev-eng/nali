@@ -10,7 +10,7 @@ import 'package:nali/widgets/liquid_glass.dart';
 /// - Supabase is always on (primary backend). Switch is disabled.
 /// - YouTube Music starts OFF. Only the user can turn it on.
 /// - Spotify shows connection status from SpotifyService + enable toggle.
-/// - SoundCloud is shown as coming soon.
+/// - SoundCloud catalog is optional and uses a server-side API credential.
 class SettingsProvidersSection extends StatelessWidget {
   const SettingsProvidersSection({super.key});
 
@@ -113,26 +113,25 @@ class SettingsProvidersSection extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
-            // ── SOUNDCLOUD (future) ────────────────────────────────
+            // ── SOUNDCLOUD ────────────────────────────────────────
             _providerCard(
               icon: Icons.cloud_queue_rounded,
-              iconColor: Colors.white38,
+              iconColor: const Color(0xffff6a35),
               title: 'SoundCloud',
-              subtitle: t('Próximamente', 'Coming soon'),
-              value: false,
-              onChanged: null,
-              disabled: true,
+              subtitle: ps.statusText('soundcloud', locale: locale),
+              value: ps.soundCloudEnabled,
+              onChanged: (v) => ps.setSoundCloudEnabled(v),
             ),
 
             const SizedBox(height: 22),
             _infoBox(
               t(
-                'YouTube Music solo se consulta cuando está activado. '
-                'Supabase sigue siendo la fuente predeterminada en todo momento. '
-                'Desactivar un proveedor no borra tu biblioteca local.',
-                'YouTube Music is only queried when enabled. '
-                'Supabase remains the default source at all times. '
-                'Disabling a provider does not delete your local library.',
+                'YouTube Music y SoundCloud solo se consultan cuando están activados. '
+                'Supabase sigue siendo la fuente principal. Las descargas MP3 de Nali '
+                'solo están disponibles para canciones alojadas en Supabase.',
+                'YouTube Music and SoundCloud are queried only when enabled. '
+                'Supabase remains the primary source. Nali MP3 downloads are '
+                'available only for songs hosted in Supabase.',
               ),
             ),
           ],
