@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Settings that are actually wired to UI / playback / privacy.
@@ -12,6 +13,46 @@ class SettingsService extends ChangeNotifier {
   double glassOpacity = 0.14;
   double glassBlur = 24;
   bool reduceAnimations = false;
+  /// low | balanced | high — controls expensive visual effects and cache budget.
+  String performanceProfile = 'balanced';
+  /// Global accessibility text scale, clamped to a comfortable range.
+  double textScale = 1.0;
+  /// Android system Picture-in-Picture; disabled by default.
+  bool pictureInPictureEnabled = false;
+
+  double get effectiveGlassBlur {
+    if (performanceProfile == 'low') return 0;
+    if (performanceProfile == 'balanced') return glassBlur.clamp(0, 18).toDouble();
+    return glassBlur.clamp(0, 48).toDouble();
+  }
+
+  bool get effectiveReduceAnimations => reduceAnimations || performanceProfile == 'low';
+  bool get allowExpensiveEffects => performanceProfile == 'high';
+
+  void _applyPerformanceBudget() {
+    final cache = PaintingBinding.instance.imageCache;
+    cache.maximumSize = performanceProfile == 'low' ? 48 : (performanceProfile == 'balanced' ? 120 : 240);
+    cache.maximumSizeBytes = performanceProfile == 'low'
+        ? 32 * 1024 * 1024
+        : (performanceProfile == 'balanced' ? 72 * 1024 * 1024 : 144 * 1024 * 1024);
+  }
+
+  Future<void> setPerformanceProfile(String value) async {
+    if (!const {'low', 'balanced', 'high'}.contains(value)) return;
+    performanceProfile = value;
+    _applyPerformanceBudget();
+    await save();
+  }
+
+  Future<void> setTextScale(double value) async {
+    textScale = value.clamp(0.85, 1.35).toDouble();
+    await save();
+  }
+
+  Future<void> setPictureInPictureEnabled(bool value) async {
+    pictureInPictureEnabled = value;
+    await save();
+  }
   bool showMiniPlayer = true;
   bool miniPlayerCollapseOnScroll = true;
   String miniPlayerCollapsedSide = 'right'; // left | right
@@ -128,6 +169,11 @@ class SettingsService extends ChangeNotifier {
     glassOpacity = p.getDouble('lg_opacity') ?? 0.14;
     glassBlur = p.getDouble('lg_blur') ?? 24;
     reduceAnimations = p.getBool('reduce_anim') ?? false;
+    performanceProfile = p.getString('performance_profile') ?? 'balanced';
+    if (!const {'low', 'balanced', 'high'}.contains(performanceProfile)) performanceProfile = 'balanced';
+    textScale = (p.getDouble('accessibility_text_scale') ?? 1.0).clamp(0.85, 1.35).toDouble();
+    pictureInPictureEnabled = p.getBool('picture_in_picture_enabled') ?? false;
+    _applyPerformanceBudget();
     showMiniPlayer = p.getBool('mini_player') ?? true;
     miniPlayerCollapseOnScroll = p.getBool('mini_player_scroll_collapse') ?? true;
     miniPlayerCollapsedSide = p.getString('mini_player_collapsed_side') ?? 'right';
@@ -393,6 +439,9 @@ class SettingsService extends ChangeNotifier {
     await p.setDouble('lg_opacity', glassOpacity);
     await p.setDouble('lg_blur', glassBlur);
     await p.setBool('reduce_anim', reduceAnimations);
+    await p.setString('performance_profile', performanceProfile);
+    await p.setDouble('accessibility_text_scale', textScale);
+    await p.setBool('picture_in_picture_enabled', pictureInPictureEnabled);
     await p.setBool('mini_player', showMiniPlayer);
     await p.setBool('mini_player_scroll_collapse', miniPlayerCollapseOnScroll);
     await p.setString('mini_player_collapsed_side', miniPlayerCollapsedSide);
