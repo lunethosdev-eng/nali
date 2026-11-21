@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/widgets/compact_header.dart';
 import 'package:nali/services/unified_search_service.dart';
@@ -187,8 +188,19 @@ class _SearchPageState extends State<SearchPage> {
                               '${s['artist'] ?? ''} · ${provider == 'youtube_music' ? 'YouTube Music' : provider == 'soundcloud' ? 'SoundCloud' : 'Nali'}',
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: TextStyle(color: Colors.white.withOpacity(0.55))),
-                            onTap: () {
+                            onTap: () async {
                               final stream = (s['audio_url'] ?? s['stream_url'] ?? '').toString();
+                              if (provider == 'soundcloud' && stream.isEmpty) {
+                                final permalink = Uri.tryParse((s['permalink_url'] ?? '').toString());
+                                if (permalink != null && permalink.scheme == 'https') {
+                                  await launchUrl(permalink, mode: LaunchMode.externalApplication);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text(t('SoundCloud no devolvió un enlace oficial reproducible.', 'SoundCloud did not return an official playable link.')),
+                                  ));
+                                }
+                                return;
+                              }
                               if (stream.isEmpty && provider != 'youtube_music') {
                                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                                   content: Text(t('Esta pista no tiene un stream disponible.', 'This track has no available stream.')),
