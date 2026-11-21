@@ -39,8 +39,8 @@ class _ListenTogetherScreenState extends State<ListenTogetherScreen> {
             children: [
               Text(
                 t(
-                  'Beta · Crea una sala y comparte el código. Tus amigos siguen la misma canción y posición (se ampliará con audio dual / audífonos).',
-                  'Beta · Create a room and share the code. Friends follow the same track and position (dual audio / headphones coming next).',
+                  'Prototipo · La sala y el código son locales por ahora. La sincronización de canción/posición entre teléfonos aún requiere conectar Realtime y probar la red.',
+                  'Prototype · Room and code are local for now. Cross-device track/position sync still needs Realtime wiring and network tests.',
                 ),
                 style: TextStyle(color: Colors.white.withOpacity(0.55), height: 1.4),
               ),
