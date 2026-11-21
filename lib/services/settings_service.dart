@@ -13,6 +13,9 @@ class SettingsService extends ChangeNotifier {
   double glassBlur = 24;
   bool reduceAnimations = false;
   bool showMiniPlayer = true;
+  bool miniPlayerCollapseOnScroll = true;
+  String miniPlayerCollapsedSide = 'right'; // left | right
+  bool miniPlayerShowLyrics = false;
   bool amoled = false;
   String? homeBackgroundPath;
   String locale = 'es';
@@ -126,6 +129,9 @@ class SettingsService extends ChangeNotifier {
     glassBlur = p.getDouble('lg_blur') ?? 24;
     reduceAnimations = p.getBool('reduce_anim') ?? false;
     showMiniPlayer = p.getBool('mini_player') ?? true;
+    miniPlayerCollapseOnScroll = p.getBool('mini_player_scroll_collapse') ?? true;
+    miniPlayerCollapsedSide = p.getString('mini_player_collapsed_side') ?? 'right';
+    miniPlayerShowLyrics = p.getBool('mini_player_show_lyrics') ?? false;
     amoled = p.getBool('amoled') ?? false;
     homeBackgroundPath = p.getString('home_background_path');
     locale = p.getString('locale') ?? 'es';
@@ -388,6 +394,9 @@ class SettingsService extends ChangeNotifier {
     await p.setDouble('lg_blur', glassBlur);
     await p.setBool('reduce_anim', reduceAnimations);
     await p.setBool('mini_player', showMiniPlayer);
+    await p.setBool('mini_player_scroll_collapse', miniPlayerCollapseOnScroll);
+    await p.setString('mini_player_collapsed_side', miniPlayerCollapsedSide);
+    await p.setBool('mini_player_show_lyrics', miniPlayerShowLyrics);
     await p.setBool('amoled', amoled);
     await p.setString('locale', locale);
     await p.setString('player_font', playerFont);
