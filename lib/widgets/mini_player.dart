@@ -152,131 +152,183 @@ class _MiniPlayerState extends State<MiniPlayer> {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([PlayerController.instance, SettingsService.instance]),
+      animation: Listenable.merge([
+        PlayerController.instance,
+        SettingsService.instance,
+      ]),
       builder: (context, _) {
         final pc = PlayerController.instance;
         final song = pc.current;
         final settings = SettingsService.instance;
-        if (song == null || !settings.showMiniPlayer ||
+        if (song == null ||
+            !settings.showMiniPlayer ||
             !settings.flag('ui_mini_player', def: true)) {
           return const SizedBox.shrink();
         }
 
         final collapse = widget.compact && settings.miniPlayerCollapseOnScroll;
         final alignment = settings.miniPlayerCollapsedSide == 'left'
-            ? Alignment.centerLeft : Alignment.centerRight;
+            ? Alignment.centerLeft
+            : Alignment.centerRight;
         final cover = song['cover_url'] ?? song['animated_cover_url'];
         final height = settings.miniPlayerShowLyrics ? 70.0 : 58.0;
+        final animationDuration = settings.effectiveReduceAnimations
+            ? Duration.zero
+            : const Duration(milliseconds: 680);
 
-        return LayoutBuilder(builder: (context, constraints) {
-          final availableWidth = constraints.maxWidth.isFinite
-              ? constraints.maxWidth : MediaQuery.of(context).size.width;
-          final targetWidth = collapse ? 58.0 : (availableWidth - 32).clamp(58.0, 900.0).toDouble();
-          final targetHeight = collapse ? 58.0 : height;
-          final textWidth = (targetWidth - 160).clamp(0.0, 740.0).toDouble();
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.maxWidth.isFinite
+                ? constraints.maxWidth
+                : MediaQuery.of(context).size.width;
+            final targetWidth = collapse
+                ? 58.0
+                : (availableWidth - 32).clamp(58.0, 900.0).toDouble();
 
-          // One persistent surface morphs between the bar and the disc. The
-          // same artwork, border, padding and alignment interpolate together;
-          // no AnimatedSwitcher swaps one widget for a completely different one.
-          return AnimatedAlign(
-            alignment: collapse ? alignment : Alignment.center,
-            duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 680),
-            curve: Curves.easeInOutCubic,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: AnimatedContainer(
-                duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 680),
-                curve: Curves.easeInOutCubic,
-                width: targetWidth,
-                height: targetHeight,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(collapse ? 30 : 16),
-                ),
-                child: GestureDetector(
-                  onTap: () => _openFull(context, song),
-                  onHorizontalDragUpdate: (d) => _dragDx += d.delta.dx,
-                  onHorizontalDragEnd: _onHorizontalEnd,
-                  child: LiquidGlass(
+            return AnimatedAlign(
+              alignment: collapse ? alignment : Alignment.center,
+              duration: animationDuration,
+              curve: Curves.easeInOutCubic,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: AnimatedContainer(
+                  duration: animationDuration,
+                  curve: Curves.easeInOutCubic,
+                  width: targetWidth,
+                  height: collapse ? 58.0 : height,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(collapse ? 30 : 16),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: collapse ? 5 : 8),
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Row(
-                            children: [
-                          AnimatedContainer(
-                            duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 620),
-                            curve: Curves.easeInOutCubic,
-                            width: collapse ? 48 : 44,
-                            height: collapse ? 48 : 44,
-                            clipBehavior: Clip.antiAlias,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(collapse ? 24 : 8),
-                            ),
-                            child: cover != null && cover.toString().isNotEmpty
-                                ? Image.network(
-                                    cover.toString(), fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const ColoredBox(color: Colors.white12),
-                                  )
-                                : const ColoredBox(color: Colors.white12,
-                                    child: Icon(Icons.music_note_rounded, color: Colors.white38)),
-                          ),
-                          ClipRect(
-                            child: AnimatedContainer(
-                              duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 460),
+                  ),
+                  child: GestureDetector(
+                    onTap: () => _openFull(context, song),
+                    onHorizontalDragUpdate: (details) {
+                      _dragDx += details.delta.dx;
+                    },
+                    onHorizontalDragEnd: _onHorizontalEnd,
+                    child: LiquidGlass(
+                      borderRadius: BorderRadius.circular(collapse ? 30 : 16),
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: collapse ? 5 : 8,
+                        ),
+                        child: Row(
+                          children: [
+                            AnimatedContainer(
+                              duration: settings.effectiveReduceAnimations
+                                  ? Duration.zero
+                                  : const Duration(milliseconds: 620),
                               curve: Curves.easeInOutCubic,
-                              width: collapse ? 0 : textWidth,
-                              child: AnimatedOpacity(
-                                duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 220),
-                                curve: Curves.easeInOut,
-                                opacity: collapse ? 0 : 1,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 10, right: 4),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(song['title']?.toString() ?? '', maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
-                                      Text(song['artist']?.toString() ?? '', maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(color: Colors.white.withOpacity(0.58), fontSize: 11)),
-                                      if (settings.miniPlayerShowLyrics && _lyricAt(pc.position) != null)
-                                        Text(_lyricAt(pc.position)!, maxLines: 1,
+                              width: collapse ? 48.0 : 44.0,
+                              height: collapse ? 48.0 : 44.0,
+                              clipBehavior: Clip.antiAlias,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(
+                                  collapse ? 24 : 8,
+                                ),
+                              ),
+                              child: cover != null &&
+                                      cover.toString().isNotEmpty
+                                  ? Image.network(
+                                      cover.toString(),
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          const ColoredBox(
+                                        color: Colors.white12,
+                                      ),
+                                    )
+                                  : const ColoredBox(
+                                      color: Colors.white12,
+                                      child: Icon(
+                                        Icons.music_note_rounded,
+                                        color: Colors.white38,
+                                      ),
+                                    ),
+                            ),
+                            if (!collapse) ...[
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: ClipRect(
+                                  child: AnimatedOpacity(
+                                    duration:
+                                        settings.effectiveReduceAnimations
+                                            ? Duration.zero
+                                            : const Duration(milliseconds: 220),
+                                    curve: Curves.easeInOut,
+                                    opacity: 1,
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          song['title']?.toString() ?? '',
+                                          maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(color: Colors.white.withOpacity(0.72), fontSize: 10)),
-                                    ],
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        Text(
+                                          song['artist']?.toString() ?? '',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.58),
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                        if (settings.miniPlayerShowLyrics &&
+                                            _lyricAt(pc.position) != null)
+                                          Text(
+                                            _lyricAt(pc.position)!,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.72),
+                                              fontSize: 10,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                          if (!collapse) ...[
-                            IconButton(
-                              tooltip: pc.isPlaying ? 'Pause' : 'Play',
-                              icon: Icon(pc.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                                  color: Colors.white, size: 25),
-                              onPressed: pc.toggle,
-                            ),
-                            IconButton(
-                              tooltip: 'Next', icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 24),
-                              onPressed: pc.playNextInQueue,
-                            ),
+                              IconButton(
+                                tooltip: pc.isPlaying ? 'Pause' : 'Play',
+                                icon: Icon(
+                                  pc.isPlaying
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 25,
+                                ),
+                                onPressed: pc.toggle,
+                              ),
+                              IconButton(
+                                tooltip: 'Next',
+                                icon: const Icon(
+                                  Icons.skip_next_rounded,
+                                  color: Colors.white70,
+                                  size: 24,
+                                ),
+                                onPressed: pc.playNextInQueue,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-          );
-        });
+            );
+          },
+        );
       },
     );
   }
-
 }
