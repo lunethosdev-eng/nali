@@ -3,6 +3,8 @@ import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/settings_service.dart';
 import 'package:nali/services/spotify_service.dart';
 import 'package:nali/widgets/liquid_glass.dart';
+import 'package:nali/screens/custom_providers_screen.dart';
+import 'package:nali/services/discord_connector_service.dart';
 
 /// Phase 2 – Complete Settings → Proveedores section.
 ///
@@ -10,7 +12,7 @@ import 'package:nali/widgets/liquid_glass.dart';
 /// - Supabase is always on (primary backend). Switch is disabled.
 /// - YouTube Music starts OFF. Only the user can turn it on.
 /// - Spotify shows connection status from SpotifyService + enable toggle.
-/// - SoundCloud catalog is optional and uses a server-side API credential.
+/// - SoundCloud no-key mode accepts public permalinks through official oEmbed; global search can be supplied by a custom provider.
 class SettingsProvidersSection extends StatelessWidget {
   const SettingsProvidersSection({super.key});
 
@@ -121,6 +123,74 @@ class SettingsProvidersSection extends StatelessWidget {
               subtitle: ps.statusText('soundcloud', locale: locale),
               value: ps.soundCloudEnabled,
               onChanged: (v) => ps.setSoundCloudEnabled(v),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              t('Sin API: puedes importar enlaces públicos de SoundCloud con el reproductor oficial. La búsqueda global requiere un proveedor/API compatible que puedes agregar abajo.',
+                'No API: public SoundCloud links can be imported using the official player. Global search needs a compatible provider/API you can add below.'),
+              style: TextStyle(color: Colors.white.withOpacity(.48), fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CustomProvidersScreen())),
+              icon: const Icon(Icons.extension_rounded),
+              label: Text(t('Proveedores personalizados', 'Custom providers')),
+              style: OutlinedButton.styleFrom(foregroundColor: Colors.white, minimumSize: const Size.fromHeight(48)),
+            ),
+            const SizedBox(height: 24),
+            _sectionTitle(t('Conectores', 'Connectors')),
+            const SizedBox(height: 10),
+            AnimatedBuilder(
+              animation: DiscordConnectorService.instance,
+              builder: (context, _) {
+                final discord = DiscordConnectorService.instance;
+                return _providerCard(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  iconColor: const Color(0xff5865F2),
+                  title: 'Discord · POLIC',
+                  subtitle: t('Vincula tu cuenta, personaliza tu tarjeta y sincroniza lo que escuchas.', 'Link your account, customize your card and sync what you listen to.'),
+                  value: discord.syncEnabled,
+                  onChanged: (v) => discord.setSyncEnabled(v),
+                  extra: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Wrap(spacing: 8, runSpacing: 8, children: [
+                      OutlinedButton.icon(
+                        onPressed: discord.busy ? null : () async {
+                          try { await discord.connectDiscord(); }
+                          catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()))); }
+                        },
+                        icon: const Icon(Icons.link_rounded, size: 16),
+                        label: Text(t('Conectar Discord', 'Connect Discord')),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          try { await discord.openCustomize(); }
+                          catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()))); }
+                        },
+                        icon: const Icon(Icons.palette_outlined, size: 16),
+                        label: Text(t('Personalizar tarjeta', 'Customize card')),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          try {
+                            final themes = await discord.availableThemes();
+                            if (!context.mounted) return;
+                            showDialog(context: context, builder: (_) => AlertDialog(
+                              backgroundColor: const Color(0xff202026),
+                              title: Text(t('Temas disponibles', 'Available themes'), style: const TextStyle(color: Colors.white)),
+                              content: SizedBox(width: 340, child: ListView(shrinkWrap: true, children: themes.map((theme) => ListTile(
+                                title: Text((theme['name'] ?? theme['label'] ?? theme['id'] ?? 'Tema').toString(), style: const TextStyle(color: Colors.white)),
+                                subtitle: Text((theme['description'] ?? '').toString(), style: const TextStyle(color: Colors.white54)),
+                              )).toList())),
+                            ));
+                          } catch (e) { if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()))); }
+                        },
+                        child: Text(t('Ver temas', 'Browse themes')),
+                      ),
+                    ]),
+                  ),
+                );
+              },
             ),
 
             const SizedBox(height: 22),
