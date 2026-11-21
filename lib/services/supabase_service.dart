@@ -1,9 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
-  // Kokoro Supabase (auth + profiles + announcements)
-  static const String kokoroUrl = 'https://ajbmpgnzkgtcmulocftd.supabase.co';
-  static const String kokoroAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqYm1wZ256a2d0Y211bG9jZnRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNDU2MjksImV4cCI6MjEwNTkyMTYyOX0.twsBnT9WBBILyXFuoQh7viI578yoNbeQztKHsr8DB8k';
+  // Pokke Supabase (auth + profiles + announcements) — reemplaza a Kokoro
+  static const String kokoroUrl = 'https://llkatqhbganntyhppchl.supabase.co';
+  static const String kokoroAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsa2F0cWhiZ2FubnR5aHBwY2hsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM4ODI4NTMsImV4cCI6MjEwOTQ1ODg1M30.rJkAJVMGqTeYV9ToEAEH25JhPOjOPZyeoPPakReuuT8';
 
   // Ukiyo server (real music tracks)
   static const String ukiyoUrl = 'https://esjoifsjljvymttinyhj.supabase.co';
