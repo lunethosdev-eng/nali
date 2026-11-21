@@ -61,7 +61,7 @@ class PlayerController extends ChangeNotifier {
         ),
         iOS: AudioContextIOS(
           category: AVAudioSessionCategory.playback,
-          options: [AVAudioSessionOptions.mixWithOthers],
+          options: {AVAudioSessionOptions.mixWithOthers},
         ),
       );
       await AudioPlayer.global.setAudioContext(ctx);
