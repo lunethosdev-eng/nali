@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,6 +14,7 @@ import 'package:nali/screens/listen_together_screen.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/screens/font_manager_screen.dart';
 import 'package:nali/services/account_sessions_service.dart';
+import 'package:nali/services/native_player_bridge.dart';
 import 'package:nali/screens/account_sessions_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -552,6 +552,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               ],
               if (widget.category == 'advanced') ...[
+              // ── PERFORMANCE / ACCESSIBILITY / PIP ─────────────
+              _section(t('Rendimiento y accesibilidad', 'Performance & accessibility')),
+              LiquidGlass(
+                borderRadius: BorderRadius.circular(14),
+                child: Column(children: [
+                  ListTile(
+                    title: Text(t('Perfil de rendimiento', 'Performance profile'), style: const TextStyle(color: Colors.white)),
+                    subtitle: Text(
+                      t('Bajo reduce blur y efectos; Alto permite más efectos y caché.', 'Low reduces blur and effects; High allows more effects and cache.'),
+                      style: TextStyle(color: Colors.white.withOpacity(0.48), fontSize: 12),
+                    ),
+                    trailing: DropdownButton<String>(
+                      value: s.performanceProfile,
+                      dropdownColor: const Color(0xff202024),
+                      style: const TextStyle(color: Colors.white),
+                      underline: const SizedBox.shrink(),
+                      items: [
+                        DropdownMenuItem(value: 'low', child: Text(t('Bajo', 'Low'))),
+                        DropdownMenuItem(value: 'balanced', child: Text(t('Equilibrado', 'Balanced'))),
+                        DropdownMenuItem(value: 'high', child: Text(t('Alto', 'High'))),
+                      ],
+                      onChanged: (value) { if (value != null) s.setPerformanceProfile(value); },
+                    ),
+                  ),
+                  const Divider(height: 1, color: Colors.white10),
+                  ListTile(
+                    title: Text(t('Tamaño del texto', 'Text size'), style: const TextStyle(color: Colors.white)),
+                    subtitle: Slider(
+                      value: s.textScale.clamp(0.85, 1.35).toDouble(), min: 0.85, max: 1.35, divisions: 10,
+                      activeColor: const Color(0xfffc3c44),
+                      label: '${(s.textScale * 100).round()}%',
+                      onChanged: (value) { s.textScale = value; s.save(); },
+                    ),
+                    trailing: Text('${(s.textScale * 100).round()}%', style: const TextStyle(color: Colors.white70)),
+                  ),
+                  const Divider(height: 1, color: Colors.white10),
+                  ListTile(
+                    leading: const Icon(Icons.keyboard_outlined, color: Colors.white70),
+                    title: Text(t('Atajos de teclado', 'Keyboard shortcuts'), style: const TextStyle(color: Colors.white)),
+                    subtitle: Text('Espacio: reproducir/pausar · Ctrl + ←/→: anterior/siguiente · Shift + ←/→: ±10 s', style: TextStyle(color: Colors.white.withOpacity(0.48), fontSize: 11)),
+                  ),
+                  if (kIsWeb) ...[
+                    const Divider(height: 1, color: Colors.white10),
+                    ListTile(
+                      leading: const Icon(Icons.picture_in_picture_alt_rounded, color: Colors.white70),
+                      title: Text('Picture in Picture', style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(t('El navegador no ofrece una ventana PiP genérica para un reproductor de audio Flutter. No se activa una ventana de vídeo falsa.', 'Browsers do not provide generic Picture-in-Picture for a Flutter audio player. Nali will not create a fake video window.'), style: TextStyle(color: Colors.white.withOpacity(0.48), fontSize: 12)),
+                    ),
+                  ],
+                  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
+                    const Divider(height: 1, color: Colors.white10),
+                    SwitchListTile(
+                      activeColor: const Color(0xfffc3c44),
+                      title: Text(t('Picture in Picture', 'Picture in Picture'), style: const TextStyle(color: Colors.white)),
+                      subtitle: Text(t('Al salir de la app, el reproductor nativo puede quedarse en una ventana flotante.', 'When leaving the app, the native player can remain in a floating window.'), style: TextStyle(color: Colors.white.withOpacity(0.48), fontSize: 12)),
+                      value: s.pictureInPictureEnabled,
+                      onChanged: (value) async {
+                        await s.setPictureInPictureEnabled(value);
+                        await NativePlayerBridge.instance.invoke<bool>('setPipEnabled', {'enabled': value});
+                      },
+                    ),
+                  ],
+                ]),
+              ),
+              const SizedBox(height: 14),
               // ── EDITORES ──────────────────────────────────────
               _section(t('Estudio', 'Studio')),
               Text(
@@ -915,7 +980,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 6),
         Text(t('Cada categoría abre sus propios controles.', 'Each category opens its own controls.'), style: const TextStyle(color: Colors.white54, fontSize: 13)),
         const SizedBox(height: 18),
-        for (final item in items) _editorCard(icon: item.$2, color: item.$4, title: _categoryTitle(item.$1), subtitle: item.$3, where: '', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SettingsScreen(category: item.$1)))),
+        for (final item in items)
+          _editorCard(
+            icon: item.$2,
+            color: item.$4,
+            title: _categoryTitle(item.$1),
+            subtitle: item.$3,
+            where: '',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SettingsScreen(category: item.$1),
+                ),
+              );
+            },
+          ),
       ]),
     );
   }
