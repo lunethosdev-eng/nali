@@ -6,6 +6,7 @@ import 'package:nali/widgets/compact_header.dart';
 import 'package:nali/services/unified_search_service.dart';
 import 'package:nali/services/player_controller.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/native_player_bridge.dart';
 
 class SearchPage extends StatefulWidget {
   SearchPage({super.key});
@@ -185,18 +186,25 @@ class _SearchPageState extends State<SearchPage> {
                                 maxLines: 1, overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             subtitle: Text(
-                              '${s['artist'] ?? ''} · ${provider == 'youtube_music' ? 'YouTube Music' : provider == 'soundcloud' ? 'SoundCloud' : 'Nali'}',
+                              '${s['artist'] ?? ''} · ${provider == 'youtube_music' ? 'YouTube Music' : provider == 'soundcloud' ? 'SoundCloud' : provider == 'apple_music' ? 'Apple Music · preview' : provider == 'deezer' ? 'Deezer · preview' : provider == 'spotify' ? 'Spotify · abrir' : provider.startsWith('custom:') ? 'Proveedor personalizado' : provider == 'supabase' ? 'Nali' : provider}',
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: TextStyle(color: Colors.white.withOpacity(0.55))),
                             onTap: () async {
                               final stream = (s['audio_url'] ?? s['stream_url'] ?? '').toString();
-                              if (provider == 'soundcloud' && stream.isEmpty) {
+                              if (!NativePlayerBridge.instance.supported && provider == 'youtube_music') {
+                                final videoId = (s['youtube_id'] ?? '').toString();
+                                if (videoId.isNotEmpty) {
+                                  await launchUrl(Uri.https('music.youtube.com', '/watch', {'v': videoId}), mode: LaunchMode.externalApplication);
+                                }
+                                return;
+                              }
+                              if ((provider == 'soundcloud' || provider == 'spotify') && stream.isEmpty) {
                                 final permalink = Uri.tryParse((s['permalink_url'] ?? '').toString());
                                 if (permalink != null && permalink.scheme == 'https') {
                                   await launchUrl(permalink, mode: LaunchMode.externalApplication);
                                 } else {
                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text(t('SoundCloud no devolvió un enlace oficial reproducible.', 'SoundCloud did not return an official playable link.')),
+                                    content: Text(provider == 'spotify' ? t('Spotify no devolvió un enlace para abrir.', 'Spotify did not return a link to open.') : t('SoundCloud no devolvió un enlace oficial reproducible.', 'SoundCloud did not return an official playable link.')),
                                   ));
                                 }
                                 return;
@@ -207,7 +215,10 @@ class _SearchPageState extends State<SearchPage> {
                                 ));
                                 return;
                               }
-                              PlayerController.instance.playPlaylist(_results, startIndex: i);
+                              if (!NativePlayerBridge.instance.supported) {
+                                await PlayerController.instance.playPlaylist(_results, startIndex: i);
+                              }
+                              if (!context.mounted) return;
                               Navigator.pushNamed(context, '/player', arguments: s);
                             },
                           );
