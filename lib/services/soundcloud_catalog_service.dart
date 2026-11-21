@@ -2,49 +2,38 @@ import 'package:flutter/foundation.dart';
 import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/supabase_service.dart';
 
-/// SoundCloud search is proxied through Supabase so the SoundCloud client
-/// secret is never shipped in the Flutter application.
+/// SoundCloud public mode supports official oEmbed for a known permalink.
+/// Catalog search requires a registered SoundCloud Client ID and is not
+/// falsely presented as available when no credential has been configured.
 class SoundCloudCatalogService {
   SoundCloudCatalogService._();
-  static final SoundCloudCatalogService instance = SoundCloudCatalogService._();
+  static final instance = SoundCloudCatalogService._();
 
   Future<List<Map<String, dynamic>>> search(String query, {int limit = 24}) async {
-    if (!ProviderService.instance.soundCloudEnabled || query.trim().length < 2) {
+    if (!ProviderService.instance.soundCloudEnabled) return const [];
+    final uri = Uri.tryParse(query.trim());
+    final isTrackUrl = uri != null && uri.scheme == 'https' &&
+        (uri.host == 'soundcloud.com' || uri.host.endsWith('.soundcloud.com'));
+    if (!isTrackUrl) {
+      debugPrint('SoundCloud catalog search needs an official Client ID; public no-key mode only resolves permalinks.');
       return const [];
     }
     try {
       final response = await SupabaseService.kokoro.functions.invoke(
-        'soundcloud-catalog',
-        body: {'action': 'search', 'query': query.trim(), 'limit': limit.clamp(1, 30)},
-      );
-      final payload = response.data;
-      final rows = payload is Map ? payload['results'] : null;
-      if (rows is! List) return const [];
-      return rows.whereType<Map>().map((row) {
-        final id = row['id']?.toString() ?? '';
-        final title = row['title']?.toString() ?? 'SoundCloud track';
-        final user = row['user'] is Map ? row['user'] as Map : const {};
-        final artist = user['username']?.toString() ?? 'SoundCloud';
-        final artwork = row['artwork_url']?.toString();
-        final permalink = row['permalink_url']?.toString() ?? '';
-        final stream = id.isEmpty ? null :
-            '${SupabaseService.kokoroUrl}/functions/v1/soundcloud-catalog?action=stream&id=$id';
-        return <String, dynamic>{
-          'id': 'soundcloud:$id',
-          'provider': 'soundcloud',
-          'source': 'soundcloud',
-          'title': title,
-          'artist': artist,
-          'cover_url': artwork,
-          'audio_url': stream,
-          'stream_url': stream,
-          'permalink_url': permalink,
-          'duration_ms': row['duration'],
-          'downloadable': false,
-        };
-      }).where((song) => song['id'] != 'soundcloud:').toList();
+        'soundcloud-catalog', body: {'url': uri.toString()},
+      ).timeout(const Duration(seconds: 15));
+      final row = response.data;
+      if (row is! Map) return const [];
+      final item = Map<String, dynamic>.from(row);
+      return [{
+        'id': 'soundcloud:${uri.toString()}', 'provider': 'soundcloud', 'source': 'soundcloud',
+        'title': item['title'] ?? 'SoundCloud track', 'artist': item['artist'] ?? 'SoundCloud',
+        'cover_url': item['thumbnail_url'], 'audio_url': null,
+        'permalink_url': item['url'] ?? uri.toString(), 'embed_url': item['embed_url'],
+        'downloadable': false,
+      }];
     } catch (error, stack) {
-      debugPrint('SoundCloud catalog error: $error\n$stack');
+      debugPrint('SoundCloud oEmbed error: $error\n$stack');
       return const [];
     }
   }
