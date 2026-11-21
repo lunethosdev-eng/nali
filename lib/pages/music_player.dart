@@ -185,7 +185,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
       title: _song!['title']?.toString() ?? '',
       artist: _song!['artist']?.toString() ?? '',
       album: _song!['album']?.toString(),
-      durationSeconds: _song!['duration_seconds'] as int?,
+      durationSeconds: _song!['duration_seconds'] is num ? (_song!['duration_seconds'] as num).round() : (_song!['duration'] is num ? (_song!['duration'] as num).round() : null),
     );
     // AI adaptive karaoke speed (beta)
     if (SettingsService.instance.betaAiKaraokeSync &&
@@ -194,7 +194,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
         title: _song!['title']?.toString() ?? '',
         artist: _song!['artist']?.toString() ?? '',
         sampleLyrics: text,
-        durationSeconds: _song!['duration_seconds'] as int?,
+        durationSeconds: _song!['duration_seconds'] is num ? (_song!['duration_seconds'] as num).round() : (_song!['duration'] is num ? (_song!['duration'] as num).round() : null),
       );
       if (mult != null) _karaokeFillMult = mult;
     }
