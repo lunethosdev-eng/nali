@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nali/widgets/compact_header.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/listening_history.dart';
@@ -8,6 +9,10 @@ import 'package:nali/services/settings_service.dart';
 import 'package:nali/services/follow_service.dart';
 import 'package:nali/services/player_controller.dart';
 import 'package:nali/services/notification_service.dart';
+import 'package:nali/services/unified_search_service.dart';
+import 'package:nali/services/provider_service.dart';
+import 'package:nali/services/custom_provider_service.dart';
+import 'package:nali/services/native_player_bridge.dart';
 
 class HomePage extends StatefulWidget {
   HomePage({super.key});
@@ -21,6 +26,7 @@ class _HomePageState extends State<HomePage> {
   bool _collapsed = false;
   List<Map<String, dynamic>> _forYou = [];
   List<Map<String, dynamic>> _catalog = [];
+  List<Map<String, dynamic>> _discover = [];
   List<Map<String, dynamic>> _trending = [];
   List<Map<String, dynamic>> _recent = [];
   List<Map<String, dynamic>> _popular = [];
@@ -63,6 +69,23 @@ class _HomePageState extends State<HomePage> {
       _forYou = [];
       _loading = false;
     });
+
+    // Home also samples the providers explicitly enabled by the user.
+    // Keep the primary Supabase catalog visible even if a remote source is slow.
+    final providers = ProviderService.instance;
+    await CustomProviderService.instance.load();
+    if (providers.youtubeMusicEnabled || providers.soundCloudEnabled ||
+        providers.spotifyEnabled || providers.appleMusicEnabled || providers.deezerEnabled ||
+        CustomProviderService.instance.hasMusicProviders) {
+      try {
+        final discovery = await UnifiedSearchService.instance.search('popular songs', limitPerProvider: 16)
+            .timeout(const Duration(seconds: 28));
+        if (mounted) setState(() => _discover = _dedup(discovery.all.where((s) =>
+          (s['provider'] ?? s['source'] ?? 'supabase').toString() != 'supabase').toList()));
+      } catch (e) { debugPrint('Home provider discovery: $e'); }
+    } else if (mounted) {
+      setState(() => _discover = []);
+    }
 
     // These enrichments are deliberately isolated and bounded. A missing RLS
     // policy, empty history, or slow analytics query cannot blank the Home.
@@ -127,10 +150,30 @@ class _HomePageState extends State<HomePage> {
     }).toList();
   }
 
-  void _play(Map<String, dynamic> song, List<Map<String, dynamic>> contextList) {
+  Future<void> _play(Map<String, dynamic> song, List<Map<String, dynamic>> contextList) async {
+    final provider = (song['provider'] ?? song['source'] ?? '').toString();
+    final youtubeId = (song['youtube_id'] ?? '').toString();
+    final audio = (song['audio_url'] ?? song['stream_url'] ?? '').toString();
+    final permalink = (song['permalink_url'] ?? '').toString();
+    // The browser cannot resolve YouTube's signed media stream. Open the
+    // official YouTube Music track instead of opening a silent Flutter player.
+    if (!NativePlayerBridge.instance.supported && provider == 'youtube_music' && youtubeId.isNotEmpty) {
+      await launchUrl(Uri.https('music.youtube.com', '/watch', {'v': youtubeId}), mode: LaunchMode.externalApplication);
+      return;
+    }
+    if (audio.isEmpty && permalink.startsWith('https://')) {
+      await launchUrl(Uri.parse(permalink), mode: LaunchMode.externalApplication);
+      return;
+    }
+    if (NativePlayerBridge.instance.supported) {
+      // Resolve only the selected YouTube track before opening the Kotlin host;
+      // extracting every search result first can delay the native player UI.
+      await PlayerController.instance.playSong(song);
+      return;
+    }
     final idx = contextList.indexWhere(
         (s) => (s['id'] ?? s['title']) == (song['id'] ?? song['title']));
-    PlayerController.instance.playPlaylist(
+    await PlayerController.instance.playPlaylist(
       contextList.isEmpty ? [song] : contextList,
       startIndex: idx >= 0 ? idx : 0,
     );
@@ -293,12 +336,17 @@ class _HomePageState extends State<HomePage> {
                           _hList(_trending),
                           const SizedBox(height: 22),
                         ],
+                        if (_discover.isNotEmpty) ...[
+                          _sectionTitle(t('Descubre música', 'Discover music')),
+                          _hList(_discover),
+                          const SizedBox(height: 22),
+                        ],
                         if (_catalog.isNotEmpty) ...[
                           _sectionTitle(t('Catálogo de Nali', 'Nali catalog')),
                           _hList(_catalog),
                           const SizedBox(height: 22),
                         ],
-                        if (_catalog.isEmpty && _forYou.isEmpty && _recent.isEmpty && _trending.isEmpty)
+                        if (_catalog.isEmpty && _discover.isEmpty && _forYou.isEmpty && _recent.isEmpty && _trending.isEmpty)
                           _homeEmptyState(),
                         // Followed artists only
                         _sectionTitle(t('Artistas que sigues', 'Artists you follow')),
