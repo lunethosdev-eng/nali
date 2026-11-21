@@ -32,7 +32,7 @@ class ProviderService extends ChangeNotifier {
   /// Actual OAuth connection is handled by SpotifyService.
   bool spotifyEnabled = false;
 
-  /// SoundCloud – prepared for future (always false for now).
+  /// SoundCloud catalog. OAuth credentials stay on the Supabase Edge Function.
   bool soundCloudEnabled = false;
 
   bool get isLoaded => _loaded;
@@ -65,8 +65,10 @@ class ProviderService extends ChangeNotifier {
   }
 
   Future<void> setSoundCloudEnabled(bool value) async {
-    // Not available yet
-    soundCloudEnabled = false;
+    if (soundCloudEnabled == value) return;
+    soundCloudEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kSoundCloudEnabled, value);
     notifyListeners();
   }
 
@@ -78,7 +80,7 @@ class ProviderService extends ChangeNotifier {
     final list = <String>['supabase'];
     if (youtubeMusicEnabled) list.add('youtube_music');
     if (spotifyEnabled) list.add('spotify');
-    // soundCloud later
+    if (soundCloudEnabled) list.add('soundcloud');
     return list;
   }
 
@@ -135,7 +137,9 @@ class ProviderService extends ChangeNotifier {
         }
         return en ? 'Disabled' : 'Desactivado';
       case 'soundcloud':
-        return en ? 'Coming soon' : 'Próximamente';
+        return soundCloudEnabled
+            ? (en ? 'Active · catalog enabled' : 'Activo · catálogo habilitado')
+            : (en ? 'Disabled' : 'Desactivado');
       default:
         return '';
     }
@@ -144,5 +148,6 @@ class ProviderService extends ChangeNotifier {
   /// Quick check used by Search / Home later.
   bool get shouldQueryYoutube => youtubeMusicEnabled;
   bool get shouldQuerySpotify => spotifyEnabled;
+  bool get shouldQuerySoundCloud => soundCloudEnabled;
   bool get shouldQuerySupabase => true;
 }
