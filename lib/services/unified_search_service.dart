@@ -1,16 +1,17 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:nali/services/music_api_service.dart';
 import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/youtube_catalog_service.dart';
+import 'package:nali/services/soundcloud_catalog_service.dart';
 
 /// Unified search for Nali (Phase 4).
 ///
 /// Rules:
 /// - Supabase is always queried (primary source).
 /// - YouTube Music is queried ONLY when ProviderService.youtubeMusicEnabled.
-/// - Spotify is prepared (enabled flag checked; real catalog later).
+/// - SoundCloud is queried only when enabled.
+/// - The MP3 download server is deliberately excluded from catalog search.
 /// - Results are tagged with `provider` / `source`.
 /// - Supports autocomplete with debounce + cancellation of in-flight requests.
 class UnifiedSearchService {
@@ -80,28 +81,28 @@ class UnifiedSearchService {
       return UnifiedSearchResult.empty(q);
     }
 
-    // 3) Optional: also try the existing MusicApiService remote search
-    //    (keeps current behaviour for download / on-demand)
-    List<Map<String, dynamic>> remoteResults = [];
-    try {
-      remoteResults = await MusicApiService.search(q);
-      remoteResults = remoteResults.map((s) {
-        final m = Map<String, dynamic>.from(s);
-        m['provider'] ??= m['source'] ?? 'remote';
-        m['source'] ??= 'remote';
-        return m;
-      }).toList();
-    } catch (_) {}
+    // 3) SoundCloud (optional; separate from the Nali MP3 download server)
+    List<Map<String, dynamic>> soundCloudResults = [];
+    if (ps.shouldQuerySoundCloud) {
+      onStatus?.call('SoundCloud…');
+      try {
+        soundCloudResults = await SoundCloudCatalogService.instance.search(
+          q,
+          limit: limitPerProvider,
+        );
+      } catch (e) {
+        debugPrint('UnifiedSearch SoundCloud error: $e');
+      }
+    }
 
     if (token != _searchToken) {
       return UnifiedSearchResult.empty(q);
     }
 
-    // Merge: Supabase first, then remote, then YouTube (avoid obvious dups by title+artist)
     final merged = _mergeResults([
       supabaseResults,
-      remoteResults,
       youtubeResults,
+      soundCloudResults,
     ]);
 
     return UnifiedSearchResult(
@@ -109,7 +110,7 @@ class UnifiedSearchService {
       all: merged,
       supabase: supabaseResults,
       youtube: youtubeResults,
-      remote: remoteResults,
+      remote: soundCloudResults,
     );
   }
 
@@ -159,6 +160,16 @@ class UnifiedSearchService {
         } catch (_) {}
       }
 
+      if (token != _searchToken) return;
+      if (ProviderService.instance.shouldQuerySoundCloud && suggestions.length < limit) {
+        try {
+          final sc = await SoundCloudCatalogService.instance.search(
+            q,
+            limit: limit - suggestions.length,
+          );
+          suggestions.addAll(sc);
+        } catch (_) {}
+      }
       if (token != _searchToken) return;
       onResults(suggestions.take(limit).toList());
     });
