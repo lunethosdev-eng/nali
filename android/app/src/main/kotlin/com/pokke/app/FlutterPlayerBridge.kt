@@ -62,6 +62,12 @@ class FlutterPlayerBridge(private val activity: Activity, engine: FlutterEngine)
                 activity.startActivity(Intent(activity, com.pokke.music.ui.player.BitChordPlayerActivity::class.java))
                 result.success(true)
             }
+            "setPipEnabled" -> {
+                val enabled = call.argument<Boolean>("enabled") ?: false
+                activity.getSharedPreferences("nali_player", android.content.Context.MODE_PRIVATE)
+                    .edit().putBoolean("pip_enabled", enabled).apply()
+                result.success(true)
+            }
             "state" -> result.success(snapshot())
             else -> result.notImplemented()
         } } catch (t: Throwable) { result.error("player_error", t.localizedMessage ?: "Player operation failed", null) }
