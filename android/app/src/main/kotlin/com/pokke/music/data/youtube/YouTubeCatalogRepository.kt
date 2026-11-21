@@ -29,9 +29,9 @@ class YouTubeCatalogRepository(
         runCatching {
             if (query.isBlank()) return@runCatching emptyList()
             // Prefer WEB_REMIX (more stable JSON shape for music search)
-            searchWithClient(query, limit, clientName = "WEB_REMIX", clientVersion = "1.20241001.01.00", clientId = "67")
+            searchWithClient(query, limit, clientName = "WEB_REMIX", clientVersion = "1.20260707.12.00", clientId = "67")
                 .ifEmpty {
-                    searchWithClient(query, limit, clientName = "ANDROID_MUSIC", clientVersion = "7.27.52", clientId = "21")
+                    searchWithClient(query, limit, clientName = "ANDROID_MUSIC", clientVersion = "8.39.42", clientId = "21")
                 }
         }
     }
