@@ -1,3 +1,6 @@
+[functions.acrcloud-humming]
+verify_jwt = true
+
 [functions.delete-account]
 verify_jwt = true
 
