@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/settings_service.dart';
 import 'package:nali/services/provider_service.dart';
+import 'package:nali/services/custom_provider_service.dart';
+import 'package:nali/services/discord_connector_service.dart';
 import 'package:nali/services/account_sessions_service.dart';
 import 'package:nali/services/listening_history.dart';
 import 'package:nali/services/spotify_service.dart';
@@ -50,7 +52,14 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseService.init();
   await SettingsService.instance.load();
+  if (NativePlayerBridge.instance.supported) {
+    await NativePlayerBridge.instance.invoke<bool>('setPipEnabled', {
+      'enabled': SettingsService.instance.pictureInPictureEnabled,
+    });
+  }
   await ProviderService.instance.load();
+  await CustomProviderService.instance.load();
+  await DiscordConnectorService.instance.load();
   await FontManagerService.instance.applySavedFont();
   await ListeningHistory.instance.load();
   // Spotify disabled (no Premium)
@@ -211,6 +220,50 @@ class _NaliAppState extends State<NaliApp> {
         _ => ThemeMode.dark,
       },
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        Widget content = MediaQuery(
+          data: media.copyWith(
+            textScaler: TextScaler.linear(
+              SettingsService.instance.textScale.clamp(0.85, 1.35).toDouble(),
+            ),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+        final platform = defaultTargetPlatform;
+        final desktopPlatform = platform == TargetPlatform.windows ||
+            platform == TargetPlatform.linux ||
+            platform == TargetPlatform.macOS;
+        final desktopWeb = kIsWeb && media.size.width >= 900;
+        if (desktopPlatform || desktopWeb) {
+          content = CallbackShortcuts(
+            bindings: <ShortcutActivator, VoidCallback>{
+              const SingleActivator(LogicalKeyboardKey.space): () {
+                unawaited(PlayerController.instance.toggle());
+              },
+              const SingleActivator(LogicalKeyboardKey.arrowRight, control: true): () {
+                unawaited(PlayerController.instance.playNextInQueue());
+              },
+              const SingleActivator(LogicalKeyboardKey.arrowLeft, control: true): () {
+                unawaited(PlayerController.instance.playPreviousInQueue());
+              },
+              const SingleActivator(LogicalKeyboardKey.arrowRight, shift: true): () {
+                final pc = PlayerController.instance;
+                final target = pc.position + const Duration(seconds: 10);
+                final end = pc.duration;
+                unawaited(pc.seekTo(end > Duration.zero && target > end ? end : target));
+              },
+              const SingleActivator(LogicalKeyboardKey.arrowLeft, shift: true): () {
+                final pc = PlayerController.instance;
+                final target = pc.position - const Duration(seconds: 10);
+                unawaited(pc.seekTo(target < Duration.zero ? Duration.zero : target));
+              },
+            },
+            child: Focus(autofocus: true, child: content),
+          );
+        }
+        return content;
+      },
       initialRoute: '/boot',
       routes: {
         '/boot': (context) => const _BootGate(),
