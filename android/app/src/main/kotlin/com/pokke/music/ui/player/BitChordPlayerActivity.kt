@@ -1,6 +1,9 @@
 package com.pokke.music.ui.player
 
 import android.os.Bundle
+import android.os.Build
+import android.app.PictureInPictureParams
+import android.util.Rational
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -39,6 +42,20 @@ class BitChordPlayerActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val enabled = getSharedPreferences("nali_player", MODE_PRIVATE)
+            .getBoolean("pip_enabled", false)
+        if (!enabled || PlayerController.currentSong.value == null || isInPictureInPictureMode) return
+        runCatching {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(16, 9))
+                .build()
+            enterPictureInPictureMode(params)
+        }.onFailure { android.util.Log.w("NaliPiP", "Could not enter PiP", it) }
     }
 
     private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
