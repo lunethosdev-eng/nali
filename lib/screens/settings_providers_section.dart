@@ -115,6 +115,24 @@ class SettingsProvidersSection extends StatelessWidget {
             ),
             const SizedBox(height: 10),
 
+            _providerCard(
+              icon: Icons.library_music_rounded,
+              iconColor: Colors.white,
+              title: 'Apple Music / iTunes',
+              subtitle: t('Búsqueda pública · avances oficiales', 'Public search · official previews'),
+              value: ps.appleMusicEnabled,
+              onChanged: (v) => ps.setAppleMusicEnabled(v),
+            ),
+            const SizedBox(height: 10),
+            _providerCard(
+              icon: Icons.graphic_eq_rounded,
+              iconColor: const Color(0xffef5b24),
+              title: 'Deezer',
+              subtitle: t('Catálogo público · avances de 30 segundos', 'Public catalog · 30-second previews'),
+              value: ps.deezerEnabled,
+              onChanged: (v) => ps.setDeezerEnabled(v),
+            ),
+
             // ── SOUNDCLOUD ────────────────────────────────────────
             _providerCard(
               icon: Icons.cloud_queue_rounded,
@@ -126,8 +144,8 @@ class SettingsProvidersSection extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              t('Sin API: puedes importar enlaces públicos de SoundCloud con el reproductor oficial. La búsqueda global requiere un proveedor/API compatible que puedes agregar abajo.',
-                'No API: public SoundCloud links can be imported using the official player. Global search needs a compatible provider/API you can add below.'),
+              t('Los enlaces públicos se abren con el reproductor oficial. La búsqueda global de SoundCloud requiere un Client ID oficial; puedes añadirlo mediante un proveedor personalizado.',
+                'Public links open in the official player. Global SoundCloud search requires an official Client ID; add it through a custom provider.'),
               style: TextStyle(color: Colors.white.withOpacity(.48), fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 18),
