@@ -58,10 +58,7 @@ class FlutterPlayerBridge(private val activity: Activity, engine: FlutterEngine)
             "moveQueueItem" -> { PlayerController.moveQueueItem(call.argument<Int>("from") ?: -1, call.argument<Int>("to") ?: -1); result.success(true) }
             "clearQueue" -> { PlayerController.clearQueue(); result.success(true) }
             "setVolume" -> { PlayerController.setVolume(call.argument<Number>("volume")?.toFloat() ?: 1f); result.success(true) }
-            "openNativePlayer" -> {
-                activity.startActivity(Intent(activity, com.pokke.music.ui.player.BitChordPlayerActivity::class.java))
-                result.success(true)
-            }
+            "openNativePlayer" -> openNativePlayer(result)
             "setPipEnabled" -> {
                 val enabled = call.argument<Boolean>("enabled") ?: false
                 activity.getSharedPreferences("nali_player", android.content.Context.MODE_PRIVATE)
@@ -72,6 +69,26 @@ class FlutterPlayerBridge(private val activity: Activity, engine: FlutterEngine)
             else -> result.notImplemented()
         } } catch (t: Throwable) { result.error("player_error", t.localizedMessage ?: "Player operation failed", null) }
     }
+
+    private fun openNativePlayer(result: MethodChannel.Result) {
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        fun launchWhenReady() {
+            val ready = PlayerController.currentSong.value != null
+            val timedOut = android.os.SystemClock.elapsedRealtime() - startedAt >= 3500L
+            if (ready || timedOut || activity.isFinishing || activity.isDestroyed) {
+                if (activity.isFinishing || activity.isDestroyed) {
+                    result.error("activity_unavailable", "La ventana principal ya no está disponible", null)
+                    return
+                }
+                activity.startActivity(Intent(activity, com.pokke.music.ui.player.BitChordPlayerActivity::class.java))
+                result.success(true)
+            } else {
+                handler.postDelayed({ launchWhenReady() }, 80L)
+            }
+        }
+        launchWhenReady()
+    }
+
     private fun songFromMap(m: Map<String, Any?>): Song {
         val lines = (m["lyrics"] as? List<*>)?.mapNotNull { it as? Map<*, *> }.orEmpty().mapNotNull { line ->
             val time = (line["timeMs"] ?: line["time_ms"] ?: line["time"]) as? Number
