@@ -1,0 +1,81 @@
+name: Build Linux and Windows desktop
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+      - run: flutter pub get
+      - name: Build Linux release
+        run: flutter build linux --release
+      - name: Package Linux bundle
+        run: tar -C build/linux/x64/release -czf nali-linux-x64.tar.gz bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nali-linux-x64
+          path: nali-linux-x64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - name: Build Windows release
+        run: flutter build windows --release
+      - name: Package Windows bundle
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath nali-windows-x64.zip -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nali-windows-x64
+          path: nali-windows-x64.zip
+          if-no-files-found: error
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download desktop bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: nali-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/nali-linux-x64.tar.gz
+            release-assets/nali-windows-x64.zip
+          generate_release_notes: true
