@@ -35,7 +35,16 @@ class LiquidGlass extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = SettingsService.instance;
     final enabled = s.liquidGlassEnabled && s.flag('ui_liquid_glass', def: true);
-    final radius = borderRadius ?? BorderRadius.circular(20);
+    final targetRadius = borderRadius ?? BorderRadius.circular(20);
+    return TweenAnimationBuilder<BorderRadius?>(
+      tween: BorderRadiusTween(end: targetRadius),
+      duration: const Duration(milliseconds: 460),
+      curve: Curves.easeInOutCubic,
+      builder: (context, radius, _) => _buildGlass(context, s, enabled, radius ?? targetRadius),
+    );
+  }
+
+  Widget _buildGlass(BuildContext context, SettingsService s, bool enabled, BorderRadius radius) {
     final tint = tintColor ?? Colors.white;
     final effectiveBlur = enabled
         ? (s.flag('ui_blur_heavy', def: false) ? s.glassBlur * 1.4 : s.glassBlur).clamp(4.0, 48.0)
