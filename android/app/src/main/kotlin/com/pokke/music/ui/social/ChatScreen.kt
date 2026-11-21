@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import com.pokke.music.data.repository.AuthRepository
 import com.pokke.music.data.repository.SocialRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun ChatScreen(
@@ -52,6 +54,26 @@ fun ChatScreen(
         }
     }
     LaunchedEffect(Unit) { refresh() }
+
+    // Refresh only the currently open conversation. Lightweight fallback until
+    // Supabase Realtime is wired; manual refresh remains available.
+    LaunchedEffect(selected?.id) {
+        val conversation = selected ?: return@LaunchedEffect
+        var cursor: String? = null
+        social.messages(conversation.id).onSuccess { initial ->
+            messages = initial
+            cursor = initial.lastOrNull()?.createdAt
+        }.onFailure { error = it.message }
+        while (isActive) {
+            delay(3_500)
+            social.observeMessagesOnce(conversation.id, cursor).onSuccess { incoming ->
+                if (incoming.isNotEmpty()) {
+                    messages = (messages + incoming).distinctBy { it.id }.sortedBy { it.createdAt }
+                    cursor = incoming.last().createdAt
+                }
+            }.onFailure { error = it.message }
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(Color(0xFF09090B)).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
