@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:nali/services/native_player_bridge.dart';
 import 'package:nali/services/settings_service.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/services/player_controller.dart';
 import 'package:nali/pages/music_player.dart';
-import 'package:nali/pages/bitchord_player_host.dart';
 import 'package:nali/services/lyrics_service.dart';
 
 /// Thin floating mini player above the bottom nav.
 ///
-/// Android opens BitChordPlayerActivity → BitChordNowPlayingHost. Mobile Web
-/// opens the responsive Flutter BitChordPlayerHost; desktop keeps its own player.
+/// Android opens the original Kotlin/Compose BitChordPlayerActivity. Web and
+/// desktop keep the native Flutter Nali player until the shared Compose UI has
+/// a real JS/Wasm target; they do not use a visual imitation of PlayerHost.
 class MiniPlayer extends StatefulWidget {
   final bool compact;
 
@@ -99,19 +98,16 @@ class _MiniPlayerState extends State<MiniPlayer> {
       }
     }
 
-    // Browser phones/tablets use the responsive BitChord-style host. Desktop
-    // browsers keep the desktop player; Android always prefers the native host.
+    // Only Android can launch the original Kotlin/Compose BitChord surface.
+    // Flutter Web must not pretend that a Dart imitation is the native PlayerHost.
     if (!context.mounted) return;
-    final useBitChordWeb = kIsWeb && MediaQuery.sizeOf(context).width < 1100;
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: false,
         barrierColor: Colors.transparent,
         transitionDuration: const Duration(milliseconds: 460),
         reverseTransitionDuration: const Duration(milliseconds: 360),
-        pageBuilder: (_, __, ___) => useBitChordWeb
-            ? const BitChordPlayerHost()
-            : MusicPlayer(),
+        pageBuilder: (_, __, ___) => MusicPlayer(),
         transitionsBuilder: (_, animation, __, child) {
           final curved = CurvedAnimation(
             parent: animation,
@@ -184,12 +180,12 @@ class _MiniPlayerState extends State<MiniPlayer> {
           // no AnimatedSwitcher swaps one widget for a completely different one.
           return AnimatedAlign(
             alignment: collapse ? alignment : Alignment.center,
-            duration: const Duration(milliseconds: 680),
+            duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 680),
             curve: Curves.easeInOutCubic,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 680),
+                duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 680),
                 curve: Curves.easeInOutCubic,
                 width: targetWidth,
                 height: targetHeight,
@@ -211,7 +207,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
                           Row(
                             children: [
                           AnimatedContainer(
-                            duration: const Duration(milliseconds: 620),
+                            duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 620),
                             curve: Curves.easeInOutCubic,
                             width: collapse ? 48 : 44,
                             height: collapse ? 48 : 44,
@@ -229,11 +225,11 @@ class _MiniPlayerState extends State<MiniPlayer> {
                           ),
                           ClipRect(
                             child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 460),
+                              duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 460),
                               curve: Curves.easeInOutCubic,
                               width: collapse ? 0 : textWidth,
                               child: AnimatedOpacity(
-                                duration: const Duration(milliseconds: 220),
+                                duration: settings.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 220),
                                 curve: Curves.easeInOut,
                                 opacity: collapse ? 0 : 1,
                                 child: Padding(
