@@ -365,6 +365,61 @@ class SpotifyService {
     }
   }
 
+  /// Search Spotify's public catalog. Spotify no longer guarantees 30s
+  /// previews, so these results open in the official Spotify app/site.
+  Future<List<Map<String, dynamic>>> searchTracks(String query, {int limit = 20}) async {
+    final q = query.trim();
+    if (q.length < 2) return const [];
+    try {
+      await load();
+      final token = await _token();
+      if (token == null || token.isEmpty) return const [];
+      lastError = null;
+      final uri = Uri.https('api.spotify.com', '/v1/search', {
+        'q': q, 'type': 'track', 'limit': '${limit.clamp(1, 30)}',
+      });
+      final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        lastError = 'spotify_search_${response.statusCode}';
+        return const [];
+      }
+      if (response.statusCode != 200) {
+        lastError = 'spotify_search_${response.statusCode}';
+        return const [];
+      }
+      final payload = jsonDecode(response.body) as Map<String, dynamic>;
+      final tracks = payload['tracks'] is Map ? (payload['tracks'] as Map)['items'] : null;
+      if (tracks is! List) return const [];
+      return tracks.whereType<Map>().map((raw) {
+        final track = Map<String, dynamic>.from(raw);
+        final artists = track['artists'] is List
+            ? (track['artists'] as List).whereType<Map>().map((a) => a['name']?.toString() ?? '').where((n) => n.isNotEmpty).join(', ')
+            : 'Spotify';
+        final album = track['album'] is Map ? Map<String, dynamic>.from(track['album']) : <String, dynamic>{};
+        final images = album['images'] is List ? album['images'] as List : const [];
+        String? cover;
+        for (final image in images) {
+          if (image is Map && image['url'] is String) { cover = image['url'].toString(); break; }
+        }
+        final external = track['external_urls'] is Map ? (track['external_urls'] as Map)['spotify']?.toString() : null;
+        final durationMs = (track['duration_ms'] as num?)?.toInt() ?? 0;
+        return <String, dynamic>{
+          'id': 'spotify_${track['id'] ?? track['name']}', 'spotify_id': track['id'],
+          'provider': 'spotify', 'source': 'spotify',
+          'title': track['name']?.toString() ?? 'Spotify track', 'artist': artists,
+          'album': album['name']?.toString() ?? '', 'cover_url': cover,
+          'audio_url': null, 'permalink_url': external,
+          'duration': durationMs > 0 ? (durationMs / 1000).round() : 0,
+          'preview_only': false, 'downloadable': false,
+        };
+      }).toList();
+    } catch (error) {
+      lastError = 'spotify_search_error: $error';
+      debugPrint('Spotify search: $error');
+      return const [];
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchPlaylists() async {
     final token = await _token();
     if (token == null) {
