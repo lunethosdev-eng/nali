@@ -256,9 +256,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (context, _) {
         if (widget.category == null) return _buildCategoryDashboard(s);
         return Scaffold(
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          backgroundColor: const Color(0xff0c0c0e),
           appBar: AppBar(
             title: Text(_categoryTitle(widget.category!)),
+            foregroundColor: Colors.white,
             backgroundColor: Colors.transparent,
           ),
           body: ListView(
@@ -690,7 +691,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SettingsProvidersSection(),
                 const SizedBox(height: 20),
                 _section(t('Proveedores de letras', 'Lyrics providers')),
-                _incompleteNote(t('La selección de proveedores de letras y su sincronización con el reproductor BitChord todavía requiere una integración compartida. Los proveedores de catálogo de música de arriba sí guardan su preferencia.', 'Lyrics-provider selection and synchronization with the BitChord player still need a shared integration. Music catalog providers above do save their preferences.')),
+                _incompleteNote(t('Los proveedores de letras personalizados se consultan primero por prioridad y después Nali usa LRCLIB como alternativa. Las claves y headers se guardan en almacenamiento seguro del dispositivo.', 'Custom lyrics providers are queried by priority first, then Nali falls back to LRCLIB. API keys and headers are stored in the device secure storage.')),
               ],
               if (widget.category == 'social') ...[
                 _section(t('Funciones sociales', 'Social features')),
@@ -907,8 +908,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ('advanced', Icons.tune_rounded, t('Funciones beta y herramientas', 'Beta features and tools'), const Color(0xffb0a0ff)),
     ];
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(title: Text(t('Ajustes', 'Settings')), backgroundColor: Colors.transparent),
+      backgroundColor: const Color(0xff0c0c0e),
+      appBar: AppBar(title: Text(t('Ajustes', 'Settings')), foregroundColor: Colors.white, backgroundColor: Colors.transparent),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 36), children: [
         Text(t('Todo en su sitio.', 'Everything in its place.'), style: const TextStyle(color: Colors.white, fontSize: 23, fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
