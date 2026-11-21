@@ -20,6 +20,8 @@ class ProviderService extends ChangeNotifier {
   static const _kYoutubeEnabled = 'provider_youtube_music_enabled';
   static const _kSpotifyEnabled = 'provider_spotify_enabled';
   static const _kSoundCloudEnabled = 'provider_soundcloud_enabled';
+  static const _kAppleEnabled = 'provider_apple_music_enabled';
+  static const _kDeezerEnabled = 'provider_deezer_enabled';
 
   // ── State ─────────────────────────────────────────────────────────
   /// Supabase is always considered enabled. Primary music source of Nali.
@@ -34,6 +36,8 @@ class ProviderService extends ChangeNotifier {
 
   /// SoundCloud catalog. OAuth credentials stay on the Supabase Edge Function.
   bool soundCloudEnabled = false;
+  bool appleMusicEnabled = false;
+  bool deezerEnabled = false;
 
   bool get isLoaded => _loaded;
   bool _loaded = false;
@@ -44,6 +48,8 @@ class ProviderService extends ChangeNotifier {
     youtubeMusicEnabled = prefs.getBool(_kYoutubeEnabled) ?? false; // default OFF
     spotifyEnabled = prefs.getBool(_kSpotifyEnabled) ?? false;
     soundCloudEnabled = prefs.getBool(_kSoundCloudEnabled) ?? false;
+    appleMusicEnabled = prefs.getBool(_kAppleEnabled) ?? false;
+    deezerEnabled = prefs.getBool(_kDeezerEnabled) ?? false;
     _loaded = true;
     notifyListeners();
   }
@@ -64,6 +70,22 @@ class ProviderService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setAppleMusicEnabled(bool value) async {
+    if (appleMusicEnabled == value) return;
+    appleMusicEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kAppleEnabled, value);
+    notifyListeners();
+  }
+
+  Future<void> setDeezerEnabled(bool value) async {
+    if (deezerEnabled == value) return;
+    deezerEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kDeezerEnabled, value);
+    notifyListeners();
+  }
+
   Future<void> setSoundCloudEnabled(bool value) async {
     if (soundCloudEnabled == value) return;
     soundCloudEnabled = value;
@@ -81,6 +103,8 @@ class ProviderService extends ChangeNotifier {
     if (youtubeMusicEnabled) list.add('youtube_music');
     if (spotifyEnabled) list.add('spotify');
     if (soundCloudEnabled) list.add('soundcloud');
+    if (appleMusicEnabled) list.add('apple_music');
+    if (deezerEnabled) list.add('deezer');
     return list;
   }
 
@@ -99,6 +123,11 @@ class ProviderService extends ChangeNotifier {
         return spotifyEnabled;
       case 'soundcloud':
         return soundCloudEnabled;
+      case 'apple_music':
+      case 'apple':
+        return appleMusicEnabled;
+      case 'deezer':
+        return deezerEnabled;
       default:
         return false;
     }
@@ -138,7 +167,16 @@ class ProviderService extends ChangeNotifier {
         return en ? 'Disabled' : 'Desactivado';
       case 'soundcloud':
         return soundCloudEnabled
-            ? (en ? 'Active · catalog enabled' : 'Activo · catálogo habilitado')
+            ? (en ? 'Enabled · public links; catalog search needs Client ID' : 'Activado · enlaces públicos; búsqueda requiere Client ID')
+            : (en ? 'Disabled' : 'Desactivado');
+      case 'apple_music':
+      case 'apple':
+        return appleMusicEnabled
+            ? (en ? 'Active · official previews' : 'Activo · avances oficiales')
+            : (en ? 'Disabled' : 'Desactivado');
+      case 'deezer':
+        return deezerEnabled
+            ? (en ? 'Active · 30-second previews' : 'Activo · avances de 30 segundos')
             : (en ? 'Disabled' : 'Desactivado');
       default:
         return '';
@@ -149,5 +187,7 @@ class ProviderService extends ChangeNotifier {
   bool get shouldQueryYoutube => youtubeMusicEnabled;
   bool get shouldQuerySpotify => spotifyEnabled;
   bool get shouldQuerySoundCloud => soundCloudEnabled;
+  bool get shouldQueryAppleMusic => appleMusicEnabled;
+  bool get shouldQueryDeezer => deezerEnabled;
   bool get shouldQuerySupabase => true;
 }
