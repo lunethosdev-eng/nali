@@ -557,7 +557,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
     if (shouldClose) {
       // 3-phase style close: accelerate slide + progressive reveal of home.
       final start = _dragDy;
-      final frames = SettingsService.instance.reduceAnimations ? 10 : 18;
+      final frames = SettingsService.instance.effectiveReduceAnimations ? 10 : 18;
       for (var i = 1; i <= frames; i++) {
         if (!mounted) return;
         final t = i / frames;
@@ -568,7 +568,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
       if (mounted) Navigator.of(context).maybePop();
     } else {
       final start = _dragDy;
-      final frames = SettingsService.instance.reduceAnimations ? 6 : 12;
+      final frames = SettingsService.instance.effectiveReduceAnimations ? 6 : 12;
       for (var i = 1; i <= frames; i++) {
         if (!mounted) return;
         final t = i / frames;
