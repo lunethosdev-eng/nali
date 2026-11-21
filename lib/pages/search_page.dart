@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/widgets/compact_header.dart';
-import 'package:nali/services/music_api_service.dart';
+import 'package:nali/services/unified_search_service.dart';
+import 'package:nali/services/player_controller.dart';
 import 'package:nali/services/settings_service.dart';
 
 class SearchPage extends StatefulWidget {
@@ -19,7 +20,7 @@ class _SearchPageState extends State<SearchPage> {
   List<Map<String, dynamic>> _results = [];
   bool _searching = false;
   bool _collapsed = false;
-  DownloadProgress? _dl;
+  String? _status;
   Timer? _debounce;
 
   String t(String es, String en) => SettingsService.instance.locale == 'en' ? en : es;
@@ -47,7 +48,7 @@ class _SearchPageState extends State<SearchPage> {
     if (q.trim().length < 3) {
       setState(() {
         _results = [];
-        _dl = null;
+        _status = null;
       });
       return;
     }
@@ -58,132 +59,33 @@ class _SearchPageState extends State<SearchPage> {
     if (q.trim().isEmpty) return;
     setState(() {
       _searching = true;
-      _dl = DownloadProgress(
-        status: t('Buscando…', 'Searching…'),
-        progress: 0.05,
-        title: q,
-      );
+      _status = t('Buscando en tus proveedores…', 'Searching your providers…');
       _results = [];
     });
     try {
-      final res = await MusicApiService.search(
+      final result = await UnifiedSearchService.instance.search(
         q,
-        onProgress: (p) {
-          if (!mounted) return;
-          setState(() {
-            // Keep query as title fallback until server sends one
-            _dl = DownloadProgress(
-              status: p.status,
-              progress: p.progress,
-              youtubeId: p.youtubeId,
-              title: p.title ?? _dl?.title ?? q,
-              artist: p.artist ?? _dl?.artist,
-              coverUrl: p.coverUrl ?? _dl?.coverUrl,
-            );
-          });
+        onStatus: (status) {
+          if (mounted) setState(() => _status = status);
         },
       );
       if (mounted) {
         setState(() {
-          _results = res;
-          if (res.isEmpty) {
-            _dl = DownloadProgress(
-              status: t('Sin resultados. Revisa el túnel en Admin.', 'No results. Check tunnel in Admin.'),
-            );
-          } else {
-            _dl = null; // hide card when we have results
-          }
+          _results = result.all;
+          _status = result.all.isEmpty
+              ? t('No hay resultados en los proveedores activados.', 'No results from enabled providers.')
+              : null;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _results = [];
-          _dl = DownloadProgress(status: t('Error: $e', 'Error: $e'));
+          _status = t('No se pudo completar la búsqueda.', 'Search could not be completed.');
         });
       }
     }
     if (mounted) setState(() => _searching = false);
-  }
-
-  Widget _downloadCard() {
-    final p = _dl;
-    if (p == null) return const SizedBox.shrink();
-    final pct = p.progress;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-      child: LiquidGlass(
-        blur: 20,
-        opacity: 0.12,
-        borderRadius: BorderRadius.circular(16),
-        enableSpecular: true,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox(
-                  width: 56,
-                  height: 56,
-                  child: p.coverUrl != null
-                      ? Image.network(
-                          p.coverUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            color: Colors.white12,
-                            child: const Icon(Icons.music_note, color: Colors.white38),
-                          ),
-                        )
-                      : Container(
-                          color: Colors.white12,
-                          child: const Icon(Icons.download_rounded, color: Colors.white38),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      p.title ?? t('Descargando…', 'Downloading…'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
-                    ),
-                    if (p.artist != null)
-                      Text(
-                        p.artist!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                      ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: pct?.clamp(0.02, 1.0),
-                        backgroundColor: Colors.white12,
-                        color: const Color(0xfffc3c44),
-                        minHeight: 5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      pct != null
-                          ? '${(pct * 100).toStringAsFixed(1)}% · ${p.status}'
-                          : p.status,
-                      style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -223,7 +125,7 @@ class _SearchPageState extends State<SearchPage> {
                             _searchCtrl.clear();
                             setState(() {
                               _results = [];
-                              _dl = null;
+                              _status = null;
                             });
                           },
                         )
@@ -234,12 +136,15 @@ class _SearchPageState extends State<SearchPage> {
               ),
             ),
           ),
-          if (_dl != null) _downloadCard(),
+          if (_status != null) Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+            child: Align(alignment: Alignment.centerLeft, child: Text(_status!, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12))),
+          ),
           Expanded(
             child: _searching && _results.isEmpty
                 ? Center(
                     child: Text(
-                      t('Esperando al servidor…', 'Waiting for server…'),
+                      t('Buscando en el catálogo…', 'Searching catalog…'),
                       style: TextStyle(color: Colors.white.withOpacity(0.4)),
                     ),
                   )
@@ -249,8 +154,8 @@ class _SearchPageState extends State<SearchPage> {
                           padding: const EdgeInsets.all(24),
                           child: Text(
                             t(
-                              'Escribe y pulsa buscar.\nSi no está en el catálogo se descarga con % real.',
-                              'Type and press search.\nIf missing from catalog it downloads with real %.',
+                              'Busca en Supabase y en los proveedores que hayas activado en Settings.',
+                              'Search Supabase and the providers you enabled in Settings.',
                             ),
                             style: TextStyle(color: Colors.white.withOpacity(0.4), height: 1.4),
                             textAlign: TextAlign.center,
@@ -264,7 +169,7 @@ class _SearchPageState extends State<SearchPage> {
                         itemBuilder: (ctx, i) {
                           final s = _results[i];
                           final cover = s['cover_url'];
-                          final justDl = s['_just_downloaded'] == true;
+                          final provider = (s['provider'] ?? s['source'] ?? 'supabase').toString();
                           return ListTile(
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
@@ -275,29 +180,24 @@ class _SearchPageState extends State<SearchPage> {
                                   : Container(width: 50, height: 50, color: Colors.white12,
                                       child: const Icon(Icons.music_note, color: Colors.white24)),
                             ),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(s['title'] ?? '',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                                ),
-                                if (justDl)
-                                  Container(
-                                    margin: const EdgeInsets.only(left: 6),
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xfffc3c44).withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(t('NUEVA', 'NEW'),
-                                        style: const TextStyle(
-                                            color: Color(0xfffc3c44), fontSize: 10, fontWeight: FontWeight.bold)),
-                                  ),
-                              ],
-                            ),
-                            subtitle: Text(s['artist'] ?? '',
-                                style: TextStyle(color: Colors.white.withOpacity(0.55))),
-                            onTap: () => Navigator.pushNamed(context, '/player', arguments: s),
+                            title: Text(s['title'] ?? '',
+                                maxLines: 1, overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            subtitle: Text(
+                              '${s['artist'] ?? ''} · ${provider == 'youtube_music' ? 'YouTube Music' : provider == 'soundcloud' ? 'SoundCloud' : 'Nali'}',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: TextStyle(color: Colors.white.withOpacity(0.55))),
+                            onTap: () {
+                              final stream = (s['audio_url'] ?? s['stream_url'] ?? '').toString();
+                              if (stream.isEmpty && provider != 'youtube_music') {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                  content: Text(t('Esta pista no tiene un stream disponible.', 'This track has no available stream.')),
+                                ));
+                                return;
+                              }
+                              PlayerController.instance.playPlaylist(_results, startIndex: i);
+                              Navigator.pushNamed(context, '/player', arguments: s);
+                            },
                           );
                         },
                       ),
