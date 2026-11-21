@@ -38,7 +38,7 @@ class LiquidGlass extends StatelessWidget {
     final targetRadius = borderRadius ?? BorderRadius.circular(20);
     return TweenAnimationBuilder<BorderRadius?>(
       tween: BorderRadiusTween(end: targetRadius),
-      duration: const Duration(milliseconds: 460),
+      duration: s.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 460),
       curve: Curves.easeInOutCubic,
       builder: (context, radius, _) => _buildGlass(context, s, enabled, radius ?? targetRadius),
     );
@@ -47,10 +47,15 @@ class LiquidGlass extends StatelessWidget {
   Widget _buildGlass(BuildContext context, SettingsService s, bool enabled, BorderRadius radius) {
     final tint = tintColor ?? Colors.white;
     final effectiveBlur = enabled
-        ? (s.flag('ui_blur_heavy', def: false) ? s.glassBlur * 1.4 : s.glassBlur).clamp(4.0, 48.0)
+        ? (s.flag('ui_blur_heavy', def: false)
+            ? s.effectiveGlassBlur * 1.4
+            : s.effectiveGlassBlur).clamp(0.0, 48.0).toDouble()
         : 0.0;
-    final effectiveOpacity = enabled ? s.glassOpacity.clamp(0.02, 0.5) : opacity * 0.35;
-    final specularOn = enabled && enableSpecular && s.flag('ui_specular', def: true);
+    final effectiveOpacity = enabled
+        ? s.glassOpacity.clamp(0.02, 0.5).toDouble()
+        : opacity * 0.35;
+    final specularOn = enabled && s.allowExpensiveEffects &&
+        enableSpecular && s.flag('ui_specular', def: true);
 
     if (!enabled) {
       return Container(
@@ -64,6 +69,56 @@ class LiquidGlass extends StatelessWidget {
         child: child,
       );
     }
+
+    final glassSurface = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        color: tint.withOpacity(effectiveOpacity),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            tint.withOpacity(effectiveOpacity * 1.4),
+            tint.withOpacity(effectiveOpacity * 0.6),
+            tint.withOpacity(effectiveOpacity * 0.9),
+          ],
+          stops: const [0.0, 0.5, 1.0],
+        ),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.22),
+          width: borderWidth,
+        ),
+      ),
+      child: Stack(
+        children: [
+          if (specularOn)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 1.5,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.only(
+                    topLeft: radius.topLeft,
+                    topRight: radius.topRight,
+                  ),
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withOpacity(0.0),
+                      Colors.white.withOpacity(0.45),
+                      Colors.white.withOpacity(0.0),
+                    ],
+                    stops: const [0.1, 0.5, 0.9],
+                  ),
+                ),
+              ),
+            ),
+          child,
+        ],
+      ),
+    );
 
     return Container(
       margin: margin,
@@ -81,63 +136,15 @@ class LiquidGlass extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: effectiveBlur, sigmaY: effectiveBlur),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              // Soft translucent fill
-              color: tint.withOpacity(effectiveOpacity),
-              // Subtle gradient for depth (liquid feel)
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  tint.withOpacity(effectiveOpacity * 1.4),
-                  tint.withOpacity(effectiveOpacity * 0.6),
-                  tint.withOpacity(effectiveOpacity * 0.9),
-                ],
-                stops: const [0.0, 0.5, 1.0],
+        child: effectiveBlur <= 0
+            ? glassSurface
+            : BackdropFilter(
+                filter: ImageFilter.blur(
+                  sigmaX: effectiveBlur,
+                  sigmaY: effectiveBlur,
+                ),
+                child: glassSurface,
               ),
-              // Thin luminous border
-              border: Border.all(
-                color: Colors.white.withOpacity(0.22),
-                width: borderWidth,
-              ),
-            ),
-            child: Stack(
-              children: [
-                // Specular highlight (top edge light reflection)
-                if (specularOn)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: 1.5,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.only(
-                          topLeft: radius.topLeft,
-                          topRight: radius.topRight,
-                        ),
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.white.withOpacity(0.0),
-                            Colors.white.withOpacity(0.45),
-                            Colors.white.withOpacity(0.0),
-                          ],
-                          stops: const [0.1, 0.5, 0.9],
-                        ),
-                      ),
-                    ),
-                  ),
-                // Content
-                child,
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }
