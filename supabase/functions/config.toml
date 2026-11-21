@@ -5,7 +5,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.mangadex-search]
-verify_jwt = true
+verify_jwt = false
 
 [functions.youtube-music-catalog]
 verify_jwt = true
@@ -14,4 +14,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.soundcloud-catalog]
+verify_jwt = true
+
+[functions.music-discovery]
 verify_jwt = true
