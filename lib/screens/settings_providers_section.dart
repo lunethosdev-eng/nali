@@ -132,6 +132,15 @@ class SettingsProvidersSection extends StatelessWidget {
               value: ps.deezerEnabled,
               onChanged: (v) => ps.setDeezerEnabled(v),
             ),
+            const SizedBox(height: 10),
+            _providerCard(
+              icon: Icons.library_music_outlined,
+              iconColor: const Color(0xffb5a3e8),
+              title: 'Internet Archive',
+              subtitle: t('Música abierta y de dominio público · reproducción directa', 'Openly licensed and public-domain audio · direct playback'),
+              value: ps.internetArchiveEnabled,
+              onChanged: (v) => ps.setInternetArchiveEnabled(v),
+            ),
 
             // ── SOUNDCLOUD ────────────────────────────────────────
             _providerCard(
@@ -214,10 +223,10 @@ class SettingsProvidersSection extends StatelessWidget {
             const SizedBox(height: 22),
             _infoBox(
               t(
-                'YouTube Music y SoundCloud solo se consultan cuando están activados. '
+                'YouTube Music, SoundCloud e Internet Archive solo se consultan cuando están activados. '
                 'Supabase sigue siendo la fuente principal. Las descargas MP3 de Nali '
                 'solo están disponibles para canciones alojadas en Supabase.',
-                'YouTube Music and SoundCloud are queried only when enabled. '
+                'YouTube Music, SoundCloud and Internet Archive are queried only when enabled. '
                 'Supabase remains the primary source. Nali MP3 downloads are '
                 'available only for songs hosted in Supabase.',
               ),
