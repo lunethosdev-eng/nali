@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:nali/services/supabase_service.dart';
 
 /// Manga catalog lookup through the public Supabase proxy. MangaDex is primary;
@@ -14,6 +15,9 @@ class MangaDexService {
       body: {'query': trimmed, 'limit': limit.clamp(1, 32)},
     ).timeout(const Duration(seconds: 22));
     final root = response.data;
+    if (root is Map && root['warning'] != null) {
+      debugPrint('MangaDex upstream fallback: ${root["warning"]}');
+    }
     final data = root is Map ? root['data'] : null;
     if (data is! List) throw StateError('MangaDex/AniList no devolvió resultados.');
     return data.map<Map<String, String?>?>((item) {
