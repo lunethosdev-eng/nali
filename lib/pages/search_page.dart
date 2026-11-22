@@ -186,18 +186,11 @@ class _SearchPageState extends State<SearchPage> {
                                 maxLines: 1, overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                             subtitle: Text(
-                              '${s['artist'] ?? ''} · ${provider == 'youtube_music' ? 'YouTube Music' : provider == 'soundcloud' ? 'SoundCloud' : provider == 'apple_music' ? 'Apple Music · preview' : provider == 'deezer' ? 'Deezer · preview' : provider == 'spotify' ? 'Spotify · abrir' : provider.startsWith('custom:') ? 'Proveedor personalizado' : provider == 'supabase' ? 'Nali' : provider}',
+                              '${s['artist'] ?? ''} · ${provider == 'youtube_music' ? 'YouTube Music' : provider == 'soundcloud' ? 'SoundCloud' : provider == 'apple_music' ? 'Apple Music · preview' : provider == 'deezer' ? 'Deezer · preview' : provider == 'internet_archive' ? 'Internet Archive · libre' : provider == 'spotify' ? 'Spotify · abrir' : provider.startsWith('custom:') ? 'Proveedor personalizado' : provider == 'supabase' ? 'Nali' : provider}',
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: TextStyle(color: Colors.white.withOpacity(0.55))),
                             onTap: () async {
                               final stream = (s['audio_url'] ?? s['stream_url'] ?? '').toString();
-                              if (!NativePlayerBridge.instance.supported && provider == 'youtube_music') {
-                                final videoId = (s['youtube_id'] ?? '').toString();
-                                if (videoId.isNotEmpty) {
-                                  await launchUrl(Uri.https('music.youtube.com', '/watch', {'v': videoId}), mode: LaunchMode.externalApplication);
-                                }
-                                return;
-                              }
                               if ((provider == 'soundcloud' || provider == 'spotify') && stream.isEmpty) {
                                 final permalink = Uri.tryParse((s['permalink_url'] ?? '').toString());
                                 if (permalink != null && permalink.scheme == 'https') {
