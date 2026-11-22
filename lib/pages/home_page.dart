@@ -152,16 +152,11 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _play(Map<String, dynamic> song, List<Map<String, dynamic>> contextList) async {
     final provider = (song['provider'] ?? song['source'] ?? '').toString();
-    final youtubeId = (song['youtube_id'] ?? '').toString();
     final audio = (song['audio_url'] ?? song['stream_url'] ?? '').toString();
     final permalink = (song['permalink_url'] ?? '').toString();
-    // The browser cannot resolve YouTube's signed media stream. Open the
-    // official YouTube Music track instead of opening a silent Flutter player.
-    if (!NativePlayerBridge.instance.supported && provider == 'youtube_music' && youtubeId.isNotEmpty) {
-      await launchUrl(Uri.https('music.youtube.com', '/watch', {'v': youtubeId}), mode: LaunchMode.externalApplication);
-      return;
-    }
-    if (audio.isEmpty && permalink.startsWith('https://')) {
+    // YouTube Music is resolved by the Supabase InnerTube stream function
+    // when selected; never send the listener out to music.youtube.com.
+    if (audio.isEmpty && permalink.startsWith('https://') && provider != 'youtube_music') {
       await launchUrl(Uri.parse(permalink), mode: LaunchMode.externalApplication);
       return;
     }
