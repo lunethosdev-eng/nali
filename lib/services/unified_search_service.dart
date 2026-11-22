@@ -7,6 +7,7 @@ import 'package:nali/services/soundcloud_catalog_service.dart';
 import 'package:nali/services/music_discovery_service.dart';
 import 'package:nali/services/custom_provider_service.dart';
 import 'package:nali/services/spotify_service.dart';
+import 'package:nali/services/internet_archive_catalog_service.dart';
 
 /// Unified search for Nali (Phase 4).
 ///
@@ -120,7 +121,12 @@ class UnifiedSearchService {
       onStatus?.call('Deezer…');
       discoveryFutures.add(MusicDiscoveryService.instance.search('deezer', q, limit: limitPerProvider));
     }
+    if (ps.shouldQueryInternetArchive) {
+      onStatus?.call('Internet Archive…');
+      discoveryFutures.add(InternetArchiveCatalogService.instance.search(q, limit: limitPerProvider));
+    }
     List<Map<String, dynamic>> discoveryResults = [];
+    if (token != _searchToken) return UnifiedSearchResult.empty(q);
     if (discoveryFutures.isNotEmpty) {
       try { discoveryResults = (await Future.wait(discoveryFutures)).expand((items) => items).toList(); }
       catch (e) { debugPrint('UnifiedSearch discovery error: $e'); }
@@ -217,6 +223,10 @@ class UnifiedSearchService {
       if (token != _searchToken) return;
       if (ProviderService.instance.shouldQueryDeezer && suggestions.length < limit) {
         try { suggestions.addAll(await MusicDiscoveryService.instance.search('deezer', q, limit: limit - suggestions.length)); } catch (_) {}
+      }
+      if (token != _searchToken) return;
+      if (ProviderService.instance.shouldQueryInternetArchive && suggestions.length < limit) {
+        try { suggestions.addAll(await InternetArchiveCatalogService.instance.search(q, limit: limit - suggestions.length)); } catch (_) {}
       }
       if (token != _searchToken) return;
       onResults(suggestions.take(limit).toList());
