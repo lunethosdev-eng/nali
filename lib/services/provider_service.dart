@@ -22,6 +22,7 @@ class ProviderService extends ChangeNotifier {
   static const _kSoundCloudEnabled = 'provider_soundcloud_enabled';
   static const _kAppleEnabled = 'provider_apple_music_enabled';
   static const _kDeezerEnabled = 'provider_deezer_enabled';
+  static const _kInternetArchiveEnabled = 'provider_internet_archive_enabled';
 
   // ── State ─────────────────────────────────────────────────────────
   /// Supabase is always considered enabled. Primary music source of Nali.
@@ -38,6 +39,7 @@ class ProviderService extends ChangeNotifier {
   bool soundCloudEnabled = false;
   bool appleMusicEnabled = false;
   bool deezerEnabled = false;
+  bool internetArchiveEnabled = false;
 
   bool get isLoaded => _loaded;
   bool _loaded = false;
@@ -50,6 +52,7 @@ class ProviderService extends ChangeNotifier {
     soundCloudEnabled = prefs.getBool(_kSoundCloudEnabled) ?? false;
     appleMusicEnabled = prefs.getBool(_kAppleEnabled) ?? false;
     deezerEnabled = prefs.getBool(_kDeezerEnabled) ?? false;
+    internetArchiveEnabled = prefs.getBool(_kInternetArchiveEnabled) ?? false;
     _loaded = true;
     notifyListeners();
   }
@@ -94,6 +97,14 @@ class ProviderService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setInternetArchiveEnabled(bool value) async {
+    if (internetArchiveEnabled == value) return;
+    internetArchiveEnabled = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kInternetArchiveEnabled, value);
+    notifyListeners();
+  }
+
   // ── Queries ───────────────────────────────────────────────────────
 
   /// Providers that are currently allowed to be queried.
@@ -105,6 +116,7 @@ class ProviderService extends ChangeNotifier {
     if (soundCloudEnabled) list.add('soundcloud');
     if (appleMusicEnabled) list.add('apple_music');
     if (deezerEnabled) list.add('deezer');
+    if (internetArchiveEnabled) list.add('internet_archive');
     return list;
   }
 
@@ -128,6 +140,9 @@ class ProviderService extends ChangeNotifier {
         return appleMusicEnabled;
       case 'deezer':
         return deezerEnabled;
+      case 'internet_archive':
+      case 'archive':
+        return internetArchiveEnabled;
       default:
         return false;
     }
@@ -178,6 +193,11 @@ class ProviderService extends ChangeNotifier {
         return deezerEnabled
             ? (en ? 'Active · 30-second previews' : 'Activo · avances de 30 segundos')
             : (en ? 'Disabled' : 'Desactivado');
+      case 'internet_archive':
+      case 'archive':
+        return internetArchiveEnabled
+            ? (en ? 'Active · openly licensed audio' : 'Activo · audio con licencia abierta')
+            : (en ? 'Disabled' : 'Desactivado');
       default:
         return '';
     }
@@ -189,5 +209,6 @@ class ProviderService extends ChangeNotifier {
   bool get shouldQuerySoundCloud => soundCloudEnabled;
   bool get shouldQueryAppleMusic => appleMusicEnabled;
   bool get shouldQueryDeezer => deezerEnabled;
+  bool get shouldQueryInternetArchive => internetArchiveEnabled;
   bool get shouldQuerySupabase => true;
 }
