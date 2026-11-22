@@ -15,7 +15,7 @@ class SoundCloudCatalogService {
     final isTrackUrl = uri != null && uri.scheme == 'https' &&
         (uri.host == 'soundcloud.com' || uri.host.endsWith('.soundcloud.com'));
     if (!isTrackUrl) {
-      debugPrint('SoundCloud catalog search needs an official Client ID; public no-key mode only resolves permalinks.');
+      debugPrint('SoundCloud global search is unavailable without an official Client ID; no-key mode only resolves a known permalink.');
       return const [];
     }
     try {
