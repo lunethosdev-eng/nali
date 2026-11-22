@@ -23,7 +23,7 @@ class YoutubeCatalogService {
         debugPrint('YouTube Music returned an unexpected payload: $payload');
         return const [];
       }
-      return rows.whereType<Map>().map((row) {
+      final songs = rows.whereType<Map>().map((row) {
         final item = Map<String, dynamic>.from(row);
         final id = (item['youtube_id'] ?? item['videoId'] ?? '').toString();
         final videoId = id.isNotEmpty ? id : (item['id'] ?? '').toString().replaceFirst('yt_', '');
@@ -45,6 +45,8 @@ class YoutubeCatalogService {
           'downloadable': false,
         };
       }).where((song) => song.isNotEmpty).take(limit).toList();
+      debugPrint('YouTube Music InnerTube catalog: ${songs.length} results for "$query"');
+      return songs;
     } catch (error, stack) {
       debugPrint('YouTube Music Edge Function error: $error\n$stack');
       return const [];
