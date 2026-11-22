@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nali/services/custom_provider_service.dart';
+import 'package:nali/services/supabase_service.dart';
 
-/// Free lyrics sources. LRCLIB and Better Lyrics can return synced text;
-/// Lyrics.ovh is a plain-text fallback. All results are validated before use.
+/// Free lyrics sources: LRCLIB, BetterLyrics, Lyrics.ovh, and additional
+/// BitChord/Tori providers proxied through Supabase (QQ, Unison, SimpMusic,
+/// KuGou and YouTube Music lyrics). User APIs are the last fallback.
 class LyricsService {
   static const _ua = 'Nali/1.1 (https://github.com/lunethosdev-eng/nali)';
 
@@ -18,16 +20,16 @@ class LyricsService {
 
   static Future<String?> resolve({
     String? localText, required String title, required String artist,
-    String? album, int? durationSeconds,
+    String? album, int? durationSeconds, String? videoId,
   }) async {
     if (!isJunk(localText)) return localText;
     return fetch(title: title, artist: artist, album: album,
-      durationSeconds: durationSeconds);
+      durationSeconds: durationSeconds, videoId: videoId);
   }
 
   static Future<String?> fetch({
     required String title, required String artist, String? album,
-    int? durationSeconds,
+    int? durationSeconds, String? videoId,
   }) async {
     final cleanTitle = title.trim();
     final cleanArtist = artist.trim();
@@ -88,7 +90,32 @@ class LyricsService {
         }
       } catch (e) { debugPrint('Lyrics.ovh: $e'); }
 
-      // 4) User-configured lyrics APIs, if any.
+      // 4) More free sources migrated from BitChord/Tori. They run behind
+      // Supabase so browsers do not fail on third-party CORS restrictions:
+      // BetterLyrics QQ/Portato, Unison, SimpMusic and KuGou;
+      // YouTube Music's own Lyrics tab. SimpMusic is region-blocked in some
+      // countries, so the server continues to the next provider on a miss.
+      try {
+        final response = await SupabaseService.kokoro.functions.invoke(
+          'lyrics-catalog',
+          body: {
+            'title': cleanTitle,
+            'artist': cleanArtist,
+            'album': album ?? '',
+            'durationSeconds': durationSeconds ?? 0,
+            'videoId': videoId ?? '',
+          },
+        ).timeout(const Duration(seconds: 45));
+        final payload = response.data;
+        final lyrics = payload is Map ? payload['lyrics']?.toString() : null;
+        if (!isJunk(lyrics)) {
+          final source = payload is Map ? payload['provider']?.toString() : 'free fallback';
+          debugPrint('Lyrics resolved by $source');
+          return lyrics;
+        }
+      } catch (e) { debugPrint('Free lyrics provider fallback: $e'); }
+
+      // 5) User-configured lyrics APIs, if any.
       try {
         final custom = await CustomProviderService.instance.fetchLyrics(title: cleanTitle, artist: cleanArtist);
         if (!isJunk(custom)) return custom;
