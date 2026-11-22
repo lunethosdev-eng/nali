@@ -6,8 +6,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
  * Library versions are pinned to the Compose Multiplatform release whose
  * Android artifacts are the androidx ones the phone app already runs (CMP
  * 1.10.x -> androidx 1.10.x, material3 1.7.3 -> androidx material3 1.3.1), so
- * depending on this module never moves the phone's Compose underneath it. The
- * desktop resolves its own newer versions over these at the top of its graph.
+ * depending on this module never moves the phone's Compose underneath it.
  *
  * The pin is the *Android* anchor only. On the JVM it is a floor, not a
  * ceiling — and there it matters which version compiles this module, because
@@ -40,7 +39,7 @@ plugins {
 kotlin {
     android {
         namespace = "com.music.bitchord.sharedui"
-        compileSdk = 36
+        compileSdk = 37
         minSdk = 26
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
@@ -104,7 +103,6 @@ kotlin {
         }
     }
 }
-
 
 compose.resources {
     publicResClass = true
