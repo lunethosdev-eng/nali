@@ -30,7 +30,7 @@ dependencies:
   dio: ^5.4.0
   path_provider: ^2.1.6
   permission_handler: ^11.3.0
-  share_plus: ^13.3.1
+  share_plus: ^12.0.2
   connectivity_plus: ^6.0.3
   url_launcher: ^6.2.5
   webview_flutter: ^4.7.0
@@ -60,6 +60,5 @@ flutter:
     - assets/Sounds/
 
 dependency_overrides:
-  # path_provider 2.1.6 permits newer Android implementations; pin the
-  # current JNI-based plugin so builds never resolve the obsolete Registrar API.
+  # Pin the JNI-based Android implementation to avoid the obsolete Registrar API.
   path_provider_android: ^2.3.1
