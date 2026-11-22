@@ -49,7 +49,9 @@ class NaliLinks {
 
   static Future<void> share(String title, Uri link,
       {String? description}) async {
-    await Share.share(message(title, link, description: description));
+    await SharePlus.instance.share(ShareParams(
+      text: message(title, link, description: description),
+    ));
   }
 }
 
