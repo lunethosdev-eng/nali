@@ -9,6 +9,7 @@ import 'package:nali/services/local_music_service.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nali/services/native_player_bridge.dart';
+import 'package:nali/services/youtube_stream_service.dart';
 
 class PlayerController extends ChangeNotifier {
   static final PlayerController instance = PlayerController._();
@@ -158,6 +159,8 @@ class PlayerController extends ChangeNotifier {
       final nextIdx = (queueIndex + 1) % queue.length;
       if (_nextReady && _preloadedIndex == nextIdx) return;
       final next = queue[nextIdx];
+      final provider = (next['provider'] ?? next['source'] ?? '').toString();
+      if (provider == 'youtube_music') return; // signed streams are resolved only when selected
       final url = (next['audio_url'] ?? next['stream_url'] ?? '').toString();
       final id = (next['id'] ?? _songKey(next)).toString();
 
@@ -364,13 +367,29 @@ class PlayerController extends ChangeNotifier {
         isPlaying) {
       return;
     }
+    final provider = (song['provider'] ?? song['source'] ?? '').toString();
+    var url = (song['audio_url'] ?? song['stream_url'] ?? song['path'] ?? '').toString();
+    if (provider == 'youtube_music') {
+      final videoId = (song['youtube_id'] ?? '').toString();
+      try {
+        url = await YoutubeStreamService.instance.resolve(videoId);
+        song['audio_url'] = url;
+        song['stream_url'] = url;
+      } catch (error) {
+        debugPrint('YouTube Music InnerTube playback error: $error');
+        currentSong = song;
+        isPlaying = false;
+        notifyListeners();
+        return;
+      }
+    }
+
     currentSong = song;
     notifyListeners();
 
     final id = (song['id'] ?? key).toString();
     final title = (song['title'] ?? '').toString();
     final artist = (song['artist'] ?? '').toString();
-    final url = (song['audio_url'] ?? song['stream_url'] ?? song['path'] ?? '').toString();
     final isLocal = song['is_local'] == true ||
         (url.isNotEmpty && !url.startsWith('http://') && !url.startsWith('https://'));
 
@@ -380,7 +399,7 @@ class PlayerController extends ChangeNotifier {
     if (sourcePath == null && isLocal && url.isNotEmpty) {
       sourcePath = url;
     }
-    if (sourcePath == null && url.isNotEmpty && !isLocal) {
+    if (sourcePath == null && url.isNotEmpty && !isLocal && provider != 'youtube_music') {
       unawaited(AudioCacheService.instance.ensureSongCached(
         id: id,
         title: title,
