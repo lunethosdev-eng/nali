@@ -18,3 +18,12 @@ verify_jwt = true
 
 [functions.music-discovery]
 verify_jwt = true
+
+[functions.youtube-music-stream]
+verify_jwt = true
+
+[functions.lyrics-catalog]
+verify_jwt = true
+
+[functions.internet-archive-catalog]
+verify_jwt = true
