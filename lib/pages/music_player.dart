@@ -186,6 +186,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
       artist: _song!['artist']?.toString() ?? '',
       album: _song!['album']?.toString(),
       durationSeconds: _song!['duration_seconds'] is num ? (_song!['duration_seconds'] as num).round() : (_song!['duration'] is num ? (_song!['duration'] as num).round() : null),
+      videoId: _song!['youtube_id']?.toString(),
     );
     // AI adaptive karaoke speed (beta)
     if (SettingsService.instance.betaAiKaraokeSync &&
