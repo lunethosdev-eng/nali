@@ -104,6 +104,8 @@ class PlayerController extends ChangeNotifier {
   bool _pausedForDj = false;
   bool _advancing = false;
   bool _nextReady = false;
+  int _playRequestToken = 0;
+  Future<void> _audioMutation = Future<void>.value();
   int _preloadedIndex = -1;
 
   Map<String, dynamic>? currentSong;
@@ -154,6 +156,7 @@ class PlayerController extends ChangeNotifier {
   }
 
   Future<void> _preloadNext() async {
+    final requestToken = _playRequestToken;
     try {
       if (queue.length < 2) return;
       final nextIdx = (queueIndex + 1) % queue.length;
@@ -166,6 +169,7 @@ class PlayerController extends ChangeNotifier {
 
       // Prefer local cache
       String? local = await AudioCacheService.instance.localPathForSongId(id);
+      if (requestToken != _playRequestToken) return;
       await _idle.stop();
       if (local != null) {
         await _idle.play(DeviceFileSource(local), volume: 0);
@@ -178,6 +182,10 @@ class PlayerController extends ChangeNotifier {
           url: url,
         ));
       } else {
+        return;
+      }
+      if (requestToken != _playRequestToken) {
+        await _idle.stop();
         return;
       }
       await _idle.pause();
@@ -282,7 +290,7 @@ class PlayerController extends ChangeNotifier {
     try {
       // Single-song queue → expand so auto-next has real next tracks
       if (queue.length < 2 && currentSong != null) {
-        await _expandQueueAround(currentSong!);
+        await _expandQueueAround(currentSong!, _playRequestToken);
       }
       if (queue.isEmpty) return;
       final nextIdx = (queueIndex + 1) % queue.length;
@@ -354,6 +362,18 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
+  Future<void> _serializeAudio(Future<void> Function() action) async {
+    final previous = _audioMutation;
+    final release = Completer<void>();
+    _audioMutation = release.future;
+    await previous;
+    try {
+      await action();
+    } finally {
+      release.complete();
+    }
+  }
+
   Future<void> playSong(Map<String, dynamic> song,
       {bool forceRestart = false}) async {
     if (_usesNativePlayer) {
@@ -367,86 +387,132 @@ class PlayerController extends ChangeNotifier {
         isPlaying) {
       return;
     }
-    final provider = (song['provider'] ?? song['source'] ?? '').toString();
-    var url = (song['audio_url'] ?? song['stream_url'] ?? song['path'] ?? '').toString();
-    if (provider == 'youtube_music') {
-      final videoId = (song['youtube_id'] ?? '').toString();
-      try {
-        url = await YoutubeStreamService.instance.resolve(videoId);
-        song['audio_url'] = url;
-        song['stream_url'] = url;
-      } catch (error) {
-        debugPrint('YouTube Music InnerTube playback error: $error');
-        currentSong = song;
-        isPlaying = false;
-        notifyListeners();
-        return;
-      }
-    }
 
-    currentSong = song;
+    final requestToken = ++_playRequestToken;
+    final selectedSong = Map<String, dynamic>.from(song);
+    final provider = (selectedSong['provider'] ?? selectedSong['source'] ?? '').toString().toLowerCase();
+    final isYouTube = provider == 'youtube_music';
+    var url = (selectedSong['audio_url'] ?? selectedSong['stream_url'] ??
+            selectedSong['path'] ?? '').toString();
+
+    currentSong = selectedSong;
+    isPlaying = false;
+    position = Duration.zero;
+    duration = Duration.zero;
+    _nextReady = false;
+    _preloadedIndex = -1;
     notifyListeners();
 
-    final id = (song['id'] ?? key).toString();
-    final title = (song['title'] ?? '').toString();
-    final artist = (song['artist'] ?? '').toString();
-    final isLocal = song['is_local'] == true ||
-        (url.isNotEmpty && !url.startsWith('http://') && !url.startsWith('https://'));
-
-    String? sourcePath =
-        await AudioCacheService.instance.localPathForSongId(id);
-    // Local device files / imported paths
-    if (sourcePath == null && isLocal && url.isNotEmpty) {
-      sourcePath = url;
-    }
-    if (sourcePath == null && url.isNotEmpty && !isLocal && provider != 'youtube_music') {
-      unawaited(AudioCacheService.instance.ensureSongCached(
-        id: id,
-        title: title,
-        artist: artist,
-        url: url,
-      ));
-    }
-
     try {
-      await _active.stop();
-      if (sourcePath != null) {
-        await _active.play(DeviceFileSource(sourcePath));
-      } else if (url.isNotEmpty) {
-        await _active.play(UrlSource(url));
-      } else {
-        debugPrint('No audio_url for song: $title');
-        return;
+      await _serializeAudio(() async {
+        await _playerA.stop();
+        await _playerB.stop();
+        await _playerA.setVolume(1);
+        await _playerB.setVolume(1);
+      });
+      if (requestToken != _playRequestToken) return;
+
+      if (isYouTube) {
+        final rawVideoId = (selectedSong['youtube_id'] ?? '').toString().trim();
+        final videoId = rawVideoId.isNotEmpty
+            ? rawVideoId
+            : (selectedSong['id'] ?? '').toString().replaceFirst(RegExp(r'^yt_'), '');
+        if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(videoId)) {
+          throw ArgumentError('Invalid YouTube video ID');
+        }
+        // Ignore search metadata URLs; they may be short previews or expired.
+        final resolved = await YoutubeStreamService.instance.resolveDetailed(videoId);
+        if (requestToken != _playRequestToken) return;
+        url = resolved.url;
+        selectedSong['youtube_id'] = videoId;
+        selectedSong['audio_url'] = url;
+        selectedSong['stream_url'] = url;
+        if (resolved.durationSeconds != null) {
+          selectedSong['duration_seconds'] = resolved.durationSeconds;
+        }
+        if (resolved.mimeType != null) selectedSong['mime_type'] = resolved.mimeType;
+        selectedSong['cover_url'] ??= 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
       }
-      isPlaying = true;
-      _pausedForDj = false;
-      _nextReady = false;
-      // If queue empty (tap from Home), build a queue around this song
-      if (queue.isEmpty) {
-        queue = [song];
-        queueIndex = 0;
-        if (song['is_local'] == true) {
-          final local = LocalMusicService.instance.tracks;
-          if (local.length > 1) {
-            queue = List<Map<String, dynamic>>.from(local);
-            final idx = queue.indexWhere((s) => _songKey(s) == key);
-            queueIndex = idx >= 0 ? idx : 0;
+      if (requestToken != _playRequestToken) return;
+
+      final id = (selectedSong['id'] ?? key).toString();
+      final title = (selectedSong['title'] ?? '').toString();
+      final artist = (selectedSong['artist'] ?? '').toString();
+      final isLocal = selectedSong['is_local'] == true ||
+          (url.isNotEmpty && !url.startsWith('http://') && !url.startsWith('https://'));
+
+      String? sourcePath;
+      if (!isYouTube) {
+        sourcePath = await AudioCacheService.instance.localPathForSongId(id);
+      }
+      if (requestToken != _playRequestToken) return;
+      if (sourcePath == null && isLocal && url.isNotEmpty) sourcePath = url;
+      if (sourcePath == null && url.isNotEmpty && !isLocal && !isYouTube) {
+        unawaited(AudioCacheService.instance.ensureSongCached(
+          id: id,
+          title: title,
+          artist: artist,
+          url: url,
+        ));
+      }
+      if (sourcePath == null && url.isEmpty) {
+        throw StateError('No audio stream is available for $title');
+      }
+
+      await _serializeAudio(() async {
+        if (requestToken != _playRequestToken) return;
+        if (sourcePath != null) {
+          await _active.play(DeviceFileSource(sourcePath!));
+        } else {
+          await _active.play(UrlSource(url));
+        }
+        if (requestToken != _playRequestToken) {
+          await _active.stop();
+          return;
+        }
+        isPlaying = true;
+        _pausedForDj = false;
+        _nextReady = false;
+
+        if (queue.isEmpty) {
+          queue = [selectedSong];
+          queueIndex = 0;
+          if (selectedSong['is_local'] == true) {
+            final local = LocalMusicService.instance.tracks;
+            if (local.length > 1) {
+              queue = List<Map<String, dynamic>>.from(local);
+              final idx = queue.indexWhere((s) => _songKey(s) == key);
+              queueIndex = idx >= 0 ? idx : 0;
+            }
+          } else {
+            unawaited(_expandQueueAround(selectedSong, requestToken));
           }
         } else {
-          unawaited(_expandQueueAround(song));
+          final idx = queue.indexWhere((s) => _songKey(s) == key);
+          if (idx >= 0) queueIndex = idx;
         }
-      } else {
-        final key = _songKey(song);
-        final idx = queue.indexWhere((s) => _songKey(s) == key);
-        if (idx >= 0) queueIndex = idx;
-      }
-      notifyListeners();
-      unawaited(_recordPlay(song));
+        notifyListeners();
+      });
+
+      if (requestToken != _playRequestToken || !isPlaying) return;
+      unawaited(_recordPlay(selectedSong));
       unawaited(_persistSession());
-      // Preload next ASAP
-      unawaited(Future.delayed(const Duration(milliseconds: 400), _preloadNext));
-    } catch (e) {
-      debugPrint('playSong error: $e');
+      unawaited(Future.delayed(const Duration(milliseconds: 400), () {
+        if (requestToken == _playRequestToken) _preloadNext();
+      }));
+    } catch (error) {
+      debugPrint('playSong error: $error');
+      if (requestToken == _playRequestToken) {
+        await _serializeAudio(() async {
+          await _playerA.stop();
+          await _playerB.stop();
+        });
+        currentSong = selectedSong;
+        isPlaying = false;
+        position = Duration.zero;
+        duration = Duration.zero;
+        notifyListeners();
+      }
     }
   }
 
@@ -485,6 +551,7 @@ class PlayerController extends ChangeNotifier {
   Future<void> toggle() async {
     if (_usesNativePlayer) { await NativePlayerBridge.instance.invoke('toggle'); return; }
     if (isPlaying) {
+      _playRequestToken++;
       await _active.pause();
       isPlaying = false;
     } else {
@@ -496,6 +563,7 @@ class PlayerController extends ChangeNotifier {
 
   Future<void> pause() async {
     if (_usesNativePlayer) { await NativePlayerBridge.instance.invoke('pause'); return; }
+    _playRequestToken++;
     await _active.pause();
     isPlaying = false;
     notifyListeners();
@@ -512,30 +580,39 @@ class PlayerController extends ChangeNotifier {
   Future<void> crossfadeTo(Map<String, dynamic> song,
       {Duration fade = const Duration(seconds: 4)}) async {
     if (_usesNativePlayer) { await playSong(song, forceRestart: true); return; }
+    final provider = (song['provider'] ?? song['source'] ?? '').toString().toLowerCase();
     final url = (song['audio_url'] ?? song['stream_url'] ?? '').toString();
-    if (url.isEmpty) {
+    if (provider == 'youtube_music' || url.isEmpty) {
       await playSong(song, forceRestart: true);
       return;
     }
+    final requestToken = ++_playRequestToken;
     final incoming = _idle;
     try {
       final id = (song['id'] ?? _songKey(song)).toString();
       final local = await AudioCacheService.instance.localPathForSongId(id);
+      if (requestToken != _playRequestToken) return;
       await incoming.stop();
       if (local != null) {
         await incoming.play(DeviceFileSource(local));
       } else {
         await incoming.play(UrlSource(url));
       }
+      if (requestToken != _playRequestToken) {
+        await incoming.stop();
+        return;
+      }
       await incoming.setVolume(0);
       final steps = 20;
       final ms = fade.inMilliseconds ~/ steps;
       for (var i = 1; i <= steps; i++) {
+        if (requestToken != _playRequestToken) return;
         final t = i / steps;
         await _active.setVolume(1.0 - t);
         await incoming.setVolume(t);
         await Future.delayed(Duration(milliseconds: ms));
       }
+      if (requestToken != _playRequestToken) return;
       await _active.stop();
       await _active.setVolume(1);
       await incoming.setVolume(1);
@@ -551,9 +628,10 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  Future<void> _expandQueueAround(Map<String, dynamic> song) async {
+  Future<void> _expandQueueAround(Map<String, dynamic> song, int requestToken) async {
     try {
       final more = await SupabaseService.getSongs(limit: 40);
+      if (requestToken != _playRequestToken) return;
       final key = _songKey(song);
       final rest = more.where((s) => _songKey(s) != key).toList();
       if (rest.isEmpty) return;
@@ -588,7 +666,7 @@ class PlayerController extends ChangeNotifier {
       queueIndex = 0;
       isPlaying = false;
       notifyListeners();
-      unawaited(_expandQueueAround(map));
+      unawaited(_expandQueueAround(map, _playRequestToken));
     } catch (e) {
       debugPrint('restoreSession: $e');
     }
