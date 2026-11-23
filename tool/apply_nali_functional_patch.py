@@ -300,10 +300,15 @@ def patch_dart_player(text):
 
     if (isYoutubeTrack) {
       try {
-        url = await YoutubeStreamService.instance.resolve(videoId);
+        final resolved = await YoutubeStreamService.instance.resolveDetailed(videoId);
         if (requestToken != _playRequestToken) return;
+        url = resolved.url;
         selected['audio_url'] = url;
         selected['stream_url'] = url;
+        if (resolved.durationSeconds != null && resolved.durationSeconds! > 0) {
+          selected['duration_seconds'] = resolved.durationSeconds;
+        }
+        if (resolved.mimeType != null) selected['mime_type'] = resolved.mimeType;
       } catch (error) {
         if (requestToken == _playRequestToken) {
           debugPrint('YouTube Music InnerTube playback error: $error');
@@ -509,6 +514,344 @@ def patch_native_player(text):
     return text
 
 
+
+
+def patch_youtube_stream_service(text):
+    if "class YoutubeResolvedStream" not in text:
+        text = replace_once(
+            text,
+            "/// Resolves a YouTube Music video to a short-lived InnerTube audio URL.",
+            """class YoutubeResolvedStream {
+  const YoutubeResolvedStream({
+    required this.url,
+    this.durationSeconds,
+    this.mimeType,
+    this.bitrate,
+  });
+
+  final String url;
+  final int? durationSeconds;
+  final String? mimeType;
+  final int? bitrate;
+}
+
+/// Resolves a YouTube Music video to a short-lived InnerTube audio URL.""",
+            "YoutubeStreamService detailed result model")
+    start = text.find("  Future<String> resolve(String videoId) async {")
+    end = text.find("\n  }\n}", start)
+    if start < 0 or end < 0:
+        raise RuntimeError("Could not locate YoutubeStreamService.resolve block")
+    old = text[start:end + 5]
+    if "resolveDetailed" in old:
+        return text
+    new = r"""  Future<String> resolve(String videoId) async =>
+      (await resolveDetailed(videoId)).url;
+
+  Future<YoutubeResolvedStream> resolveDetailed(String videoId) async {
+    final id = videoId.trim();
+    if (!RegExp(r'^[A-Za-z0-9_-]{11}$').hasMatch(id)) {
+      throw ArgumentError('Invalid YouTube video ID');
+    }
+    final response = await SupabaseService.kokoro.functions.invoke(
+      'youtube-music-stream',
+      body: {'videoId': id},
+    ).timeout(const Duration(seconds: 45));
+    final payload = response.data;
+    final url = payload is Map ? (payload['audio_url'] ?? '').toString() : '';
+    if (!url.startsWith('https://') || !url.contains('googlevideo.com')) {
+      final detail = payload is Map ? payload['detail']?.toString() : null;
+      throw StateError(detail?.isNotEmpty == true
+          ? 'InnerTube stream unavailable: $detail'
+          : 'InnerTube did not return an audio stream');
+    }
+    final rawDuration = payload is Map ? payload['duration_seconds'] : null;
+    final duration = rawDuration is num
+        ? rawDuration.round()
+        : int.tryParse(rawDuration?.toString() ?? '');
+    final rawBitrate = payload is Map ? payload['bitrate'] : null;
+    final bitrate = rawBitrate is num
+        ? rawBitrate.round()
+        : int.tryParse(rawBitrate?.toString() ?? '');
+    final mime = payload is Map ? payload['mime_type']?.toString() : null;
+    debugPrint('YouTube Music InnerTube stream resolved for $id');
+    return YoutubeResolvedStream(
+      url: url,
+      durationSeconds: duration != null && duration > 0 ? duration : null,
+      mimeType: mime?.isNotEmpty == true ? mime : null,
+      bitrate: bitrate,
+    );
+  }"""
+    return text[:start] + new + "\n" + text[end + 5:]
+
+def patch_music_player(text):
+    text = replace_once(
+        text,
+        "import 'package:flutter/material.dart';",
+        "import 'package:flutter/material.dart';\nimport 'package:video_player/video_player.dart';",
+        "MusicPlayer web Canvas video import")
+
+    text = replace_once(
+        text,
+        "  String _keyOf(Map<String, dynamic>? s) =>\n      (s?['id'] ?? s?['title'] ?? '').toString();",
+        r"""  String _keyOf(Map<String, dynamic>? s) =>
+      (s?['id'] ?? s?['title'] ?? '').toString();
+
+  int _metadataDurationSeconds(Map<String, dynamic>? song) {
+    if (song == null) return 0;
+    for (final key in const ['duration_seconds', 'durationSeconds', 'duration']) {
+      final value = song[key];
+      if (value is num && value > 0) return value.round();
+      if (value is String) {
+        final parts = value.trim().split(':').map((part) => int.tryParse(part)).toList();
+        if (parts.isNotEmpty && parts.every((part) => part != null)) {
+          final numbers = parts.cast<int>();
+          if (numbers.length == 2) return numbers[0] * 60 + numbers[1];
+          if (numbers.length == 3) return numbers[0] * 3600 + numbers[1] * 60 + numbers[2];
+        }
+      }
+    }
+    return 0;
+  }
+
+  String _normalizeCanvasText(String value) {
+    const replacements = {
+      'á':'a','à':'a','ä':'a','â':'a','ã':'a','å':'a',
+      'é':'e','è':'e','ë':'e','ê':'e',
+      'í':'i','ì':'i','ï':'i','î':'i',
+      'ó':'o','ò':'o','ö':'o','ô':'o','õ':'o',
+      'ú':'u','ù':'u','ü':'u','û':'u',
+      'ç':'c','ñ':'n','ý':'y','ÿ':'y',
+    };
+    var normalized = value.toLowerCase();
+    replacements.forEach((from, to) => normalized = normalized.replaceAll(from, to));
+    return normalized.replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  List<String> _canvasArtists(String raw) => raw
+      .split(RegExp(r'\s*,\s*|\s*&\s*|\s+×\s+|\s+x\s+|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b', caseSensitive: false))
+      .map(_normalizeCanvasText)
+      .where((value) => value.isNotEmpty)
+      .toList();
+
+  Map<String, dynamic>? _canvasArtwork(Map<String, dynamic>? song) {
+    if (song == null) return null;
+    final raw = song['canvas_artwork'] ?? song['canvasArtwork'] ?? song['canvas'];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    final url = (song['canvas_video_url'] ?? song['canvas_url'] ??
+        song['motion_artwork_url'] ?? song['animated_artwork_video_url'] ?? '').toString();
+    if (!url.startsWith('https://')) return null;
+    return {
+      'url': url,
+      'fallbackUrl': song['canvas_fallback_url'] ?? song['canvas_fallback'],
+      'title': song['canvas_title'],
+      'artist': song['canvas_artist'],
+      'album': song['canvas_album'],
+    };
+  }
+
+  bool _canvasMatches(Map<String, dynamic> canvas, Map<String, dynamic>? song) {
+    if (song == null) return false;
+    final rawCanvasTitle = canvas['title'];
+    final title = (song['title'] ?? '').toString();
+    if (rawCanvasTitle != null && title.isNotEmpty &&
+        _normalizeCanvasText(rawCanvasTitle.toString()) != _normalizeCanvasText(title)) return false;
+
+    final rawCanvasArtist = canvas['artist'];
+    final artist = (song['artist'] ?? '').toString();
+    if (rawCanvasArtist != null && artist.isNotEmpty) {
+      final wanted = _canvasArtists(artist);
+      final found = _canvasArtists(rawCanvasArtist.toString());
+      if (wanted.isEmpty || found.isEmpty || !wanted.every(found.contains)) return false;
+    }
+
+    final canvasAlbum = (canvas['album'] ?? '').toString();
+    final album = (song['album'] ?? '').toString();
+    if (canvasAlbum.isNotEmpty && album.isNotEmpty &&
+        _normalizeCanvasText(canvasAlbum) != _normalizeCanvasText(album)) return false;
+    return true;
+  }
+
+  String? _canvasUrl(Map<String, dynamic>? canvas, Map<String, dynamic>? song,
+      {bool portrait = false}) {
+    if (canvas == null || !_canvasMatches(canvas, song)) return null;
+    final raw = (portrait
+        ? (canvas['portraitUrl'] ?? canvas['portrait_url'] ?? canvas['url'])
+        : canvas['url'])?.toString() ?? '';
+    return raw.startsWith('https://') ? raw : null;
+  }
+
+  String? _canvasFallbackUrl(Map<String, dynamic>? canvas, Map<String, dynamic>? song) {
+    if (canvas == null || !_canvasMatches(canvas, song)) return null;
+    final raw = (canvas['fallbackUrl'] ?? canvas['fallback_url'] ?? '').toString();
+    return raw.startsWith('https://') ? raw : null;
+  }""",
+        "MusicPlayer Canvas metadata and duration helpers")
+
+    text = replace_once(
+        text,
+        "        final cover = song?['cover_url'] ?? song?['animated_cover_url'];\n        final pos = pc.position;\n        final dur = pc.duration.inMilliseconds > 0 ? pc.duration : const Duration(seconds: 1);\n        final progress = (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0);",
+        """        final cover = song?['cover_url'] ?? song?['animated_cover_url'];
+        final canvas = _canvasArtwork(song);
+        final canvasUrl = _canvasUrl(canvas, song,
+            portrait: MediaQuery.of(context).size.height > MediaQuery.of(context).size.width);
+        final canvasFallbackUrl = _canvasFallbackUrl(canvas, song);
+        final pos = pc.position;
+        // Prefer the real decoder duration. Until it arrives, use catalog
+        // metadata; never invent a one-second track duration.
+        final metadataSeconds = _metadataDurationSeconds(song);
+        final dur = pc.duration.inMilliseconds > 0
+            ? pc.duration
+            : Duration(seconds: metadataSeconds);
+        final progress = dur.inMilliseconds > 0
+            ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
+            : 0.0;""",
+        "MusicPlayer real duration fallback")
+
+    text = replace_once(
+        text,
+        """                        // Soft cover blur background
+                    if (cover != null)
+                      Image.network(
+                        cover.toString(),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox(),
+                      ),""",
+        """                        // BitChord Canvas: a muted looping video behind the
+                        // existing animated player UI. If no verified Canvas
+                        // artwork exists, retain the album-cover backdrop.
+                    if (canvasUrl != null)
+                      Positioned.fill(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 520),
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          child: _CanvasVideoBackground(
+                            key: ValueKey(canvasUrl),
+                            url: canvasUrl,
+                            fallbackUrl: canvasFallbackUrl,
+                            fallback: cover == null
+                                ? const ColoredBox(color: Color(0xFF0A0A0C))
+                                : Image.network(cover.toString(), fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => const SizedBox()),
+                          ),
+                        ),
+                      )
+                    else if (cover != null)
+                      Image.network(
+                        cover.toString(),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox(),
+                      ),""",
+        "MusicPlayer BitChord Canvas background host")
+
+    if "class _CanvasVideoBackground extends StatefulWidget" not in text:
+        text += r"""
+
+/// Web-compatible Canvas host. video_player uses the browser's HTML video
+/// element on Web and Media3/AVPlayer on native platforms. The player UI above
+/// remains the existing animated Nali/BitChord-inspired layout.
+class _CanvasVideoBackground extends StatefulWidget {
+  const _CanvasVideoBackground({
+    super.key,
+    required this.url,
+    required this.fallback,
+    this.fallbackUrl,
+  });
+
+  final String url;
+  final String? fallbackUrl;
+  final Widget fallback;
+
+  @override
+  State<_CanvasVideoBackground> createState() => _CanvasVideoBackgroundState();
+}
+
+class _CanvasVideoBackgroundState extends State<_CanvasVideoBackground> {
+  VideoPlayerController? _controller;
+  int _loadToken = 0;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load(widget.url);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CanvasVideoBackground oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url || oldWidget.fallbackUrl != widget.fallbackUrl) {
+      _failed = false;
+      _load(widget.url);
+    }
+  }
+
+  Future<void> _load(String url, {bool fallbackAttempt = false}) async {
+    final token = ++_loadToken;
+    final next = VideoPlayerController.networkUrl(Uri.parse(url));
+    try {
+      await next.initialize();
+      await next.setLooping(true);
+      await next.setVolume(0);
+      await next.play();
+      if (!mounted || token != _loadToken) {
+        await next.dispose();
+        return;
+      }
+      final previous = _controller;
+      setState(() => _controller = next);
+      await previous?.dispose();
+    } catch (error) {
+      await next.dispose();
+      if (token != _loadToken) return;
+      final fallback = widget.fallbackUrl;
+      if (!fallbackAttempt && fallback != null && fallback.isNotEmpty && fallback != url) {
+        await _load(fallback, fallbackAttempt: true);
+      } else if (mounted) {
+        setState(() => _failed = true);
+        debugPrint('Canvas video unavailable: $error');
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (_failed || controller == null || !controller.value.isInitialized) {
+      return widget.fallback;
+    }
+    final size = controller.value.size;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        widget.fallback,
+        AnimatedOpacity(
+          opacity: 1,
+          duration: const Duration(milliseconds: 420),
+          child: FittedBox(
+            fit: BoxFit.cover,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: size.width,
+              height: size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+"""
+    return text
+
 def main():
     edit("lib/services/supabase_service.dart", patch_supabase)
     edit("lib/services/unified_search_service.dart", patch_unified_search)
@@ -516,7 +859,9 @@ def main():
     edit("lib/screens/settings_providers_section.dart", patch_provider_settings)
     edit("lib/pages/search_page.dart", patch_search_page)
     edit("lib/services/player_controller.dart", patch_dart_player)
+    edit("lib/services/youtube_stream_service.dart", patch_youtube_stream_service)
     edit("android/app/src/main/kotlin/com/pokke/music/player/PlayerController.kt", patch_native_player)
+    edit("lib/pages/music_player.dart", patch_music_player)
 
 
 if __name__ == "__main__":
