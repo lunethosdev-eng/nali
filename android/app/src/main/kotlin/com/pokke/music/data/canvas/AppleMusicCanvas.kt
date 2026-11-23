@@ -1,6 +1,7 @@
 package com.pokke.music.data.canvas
 
 import com.music.bitchord.data.canvas.CanvasArtwork
+import com.music.bitchord.data.canvas.CanvasSource
 import com.music.bitchord.data.canvas.normalizeForMatch
 import com.music.bitchord.data.canvas.splitArtists
 
@@ -100,6 +101,7 @@ object AppleMusicCanvas {
                     Log.d(TAG, "inline motion artwork for '$songName'")
                     return CanvasArtwork(
                         primary, alternate, songName, songArtist, albumName,
+                        source = CanvasSource.APPLE,
                         portraitUrl = tallUrl(video),
                     )
                 }
@@ -160,6 +162,7 @@ object AppleMusicCanvas {
                 title = name,
                 artist = attributes["artistName"]?.jsonPrimitive?.contentOrNull,
                 album = name,
+                source = CanvasSource.APPLE,
             )
         }
         return null
@@ -303,6 +306,7 @@ object AppleMusicCanvas {
             title = songTitle,
             artist = songArtist ?: attributes["artistName"]?.jsonPrimitive?.contentOrNull,
             album = albumName,
+            source = CanvasSource.APPLE,
             portraitUrl = tallUrl(video),
         )
     }
