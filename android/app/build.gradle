@@ -14,7 +14,7 @@ def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '
 
 android {
     namespace "com.pokke.music"
-    compileSdk 37
+    compileSdk 36
     ndkVersion flutter.ndkVersion
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
