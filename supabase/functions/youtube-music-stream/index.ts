@@ -13,9 +13,17 @@ Platform.shim.eval = async (
   data: { output: string },
   env: Record<string, string | number | boolean | null | undefined>,
 ) => {
-  const names = Object.keys(env);
-  const values = names.map((name) => env[name]);
-  return new Function(...names, data.output)(...values);
+  // youtubei.js expects the evaluator to return the decipher functions, not
+  // just execute the player script. Without these exports, signed `sig` and
+  // throttling `n` parameters remain unusable even when the player script loads.
+  const properties: string[] = [];
+  if (env.n) {
+    properties.push(`n: exportedVars.nFunction(${JSON.stringify(env.n)})`);
+  }
+  if (env.sig) {
+    properties.push(`sig: exportedVars.sigFunction(${JSON.stringify(env.sig)})`);
+  }
+  return new Function(`${data.output}\nreturn { ${properties.join(', ')} }`)();
 };
 
 // Supabase Edge egress can fail against www.youtube.com. Retry InnerTube API
