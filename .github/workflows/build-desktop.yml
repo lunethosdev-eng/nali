@@ -30,9 +30,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
+        if: matrix.flutter_arch == 'x64'
         with:
           channel: stable
           cache: true
+      - name: Install Flutter stable on Linux ARM64
+        if: matrix.flutter_arch == 'arm64'
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$HOME/flutter"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+          "$HOME/flutter/bin/flutter" --version
+          "$HOME/flutter/bin/flutter" precache --linux
       - name: Apply Nali playback/provider fixes
         run: python tool/apply_nali_functional_patch.py
       - name: Install Linux build dependencies
