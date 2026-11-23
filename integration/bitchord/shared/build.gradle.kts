@@ -9,7 +9,7 @@ plugins {
 kotlin {
     android {
         namespace = "com.music.bitchord.shared"
-        compileSdk = 37
+        compileSdk = 36
         minSdk = 26
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_17)
