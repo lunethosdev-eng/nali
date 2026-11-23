@@ -1,0 +1,34 @@
+app-id: io.github.lunethosdev_eng.Nali
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+command: nali
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=xdg-music:rw
+  - --filesystem=xdg-download:rw
+modules:
+  - name: nali
+    buildsystem: simple
+    build-commands:
+      - install -d /app/nali
+      - cp -a bundle/. /app/nali/
+      - install -Dm755 nali-wrapper.sh /app/bin/nali
+      - install -Dm644 nali.desktop /app/share/applications/io.github.lunethosdev_eng.Nali.desktop
+      - install -Dm644 nali.png /app/share/icons/hicolor/512x512/apps/io.github.lunethosdev_eng.Nali.png
+    sources:
+      - type: dir
+        path: ../bundle
+        dest: bundle
+      - type: file
+        path: nali-wrapper.sh
+      - type: file
+        path: nali.desktop
+      - type: file
+        path: ../assets/logo.png
+        dest-filename: nali.png
