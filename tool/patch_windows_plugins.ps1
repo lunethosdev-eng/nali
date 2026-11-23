@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $shareHeader = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\share_plus\windows\share_plus_windows_plugin.h'
+$vectorHeader = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\share_plus\windows\vector.h'
 $secureCpp = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\flutter_secure_storage_windows\windows\flutter_secure_storage_windows_plugin.cpp'
 
 function Write-Utf8NoBom([string]$Path, [string]$Content) {
@@ -21,11 +22,25 @@ if ($shareText -notmatch '(?m)^\s*#include\s*[<"]wrl\.h[>"]') {
     }
 }
 $shareText = $shareText.Replace('static std::wstring SharePlusWindowsPlugin::Utf16FromUtf8', 'static std::wstring Utf16FromUtf8')
-if ($shareText -notmatch '(?m)^\s*#include\s*[<"]wrl\.h[>"]') {
-    throw 'WRL include was not added to share_plus header.'
-}
 Write-Utf8NoBom $shareHeader $shareText
-Write-Host "Patched $shareHeader"
+
+# The published share_plus vector.h uses STL and WRL RuntimeClass types but
+# some revisions omit the direct headers required by MSVC.
+if (-not (Test-Path $vectorHeader)) {
+    throw "share_plus vector.h not found: $vectorHeader. Run flutter pub get first."
+}
+$vectorText = [System.IO.File]::ReadAllText($vectorHeader)
+if ($vectorText -notmatch '(?m)^\s*#include\s*[<"]vector[>"]') {
+    $vectorText = $vectorText.Replace('#pragma once', "#pragma once`r`n`r`n#include <vector>")
+}
+if ($vectorText -notmatch '(?m)^\s*#include\s*[<"]wrl/implements\.h[>"]') {
+    $vectorText = $vectorText.Replace('#include <vector>', "#include <vector>`r`n#include <wrl/implements.h>")
+}
+if ($vectorText -notmatch '(?m)^\s*#include\s*[<"]vector[>"]' -or
+    $vectorText -notmatch '(?m)^\s*#include\s*[<"]wrl/implements\.h[>"]') {
+    throw 'Could not add required STL/WRL headers to share_plus vector.h.'
+}
+Write-Utf8NoBom $vectorHeader $vectorText
 
 if (-not (Test-Path $secureCpp)) {
     throw "flutter_secure_storage Windows source not found: $secureCpp. Run flutter pub get first."
@@ -46,9 +61,7 @@ foreach ($oldForm in $oldForms) {
 }
 $alreadyPatched = $secureText.Contains('std::string target_name(static_cast<LPCSTR>(target_name_ansi));')
 $knownModernForm = $secureText -match 'std::string\s+target_name\s*\(\s*static_cast\s*<\s*LPCSTR\s*>\s*\('
-if (-not $changed -and -not $alreadyPatched -and -not $knownModernForm) {
-    Write-Warning 'No known CW2A target_name conversion found. Leaving source unchanged so the compiler can report the actual incompatibility.'
-} else {
+if ($changed -or $alreadyPatched -or $knownModernForm) {
     Write-Utf8NoBom $secureCpp $secureText
-    Write-Host "Checked $secureCpp"
 }
+Write-Host 'Windows plugin compatibility patches applied.'
