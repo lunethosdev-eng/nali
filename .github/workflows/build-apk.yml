@@ -1,8 +1,9 @@
-name: Build Android APK
+name: Build Android APKs
 
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
   pull_request:
     branches: [main, master]
   workflow_dispatch:
@@ -16,48 +17,72 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
-
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
-
-      - name: Set up Android SDK 37
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
+        with:
+          # The old "tools" SDK package no longer exists and breaks setup.
+          packages: platform-tools
       - name: Install Android API 37
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "platforms;android-37" "build-tools;37.0.0"
-
+          sdkmanager "platforms;android-37" "build-tools;37.0.0" "platform-tools"
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-
+      - name: Apply Nali playback/provider fixes
+        run: python tool/apply_nali_functional_patch.py
       - name: Get dependencies
         run: flutter pub get
-
       - name: Analyze project
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
-
-      - name: Build release APK
-        run: flutter build apk --release --no-tree-shake-icons
-
-      - name: Verify APK output
-        run: test -s build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - name: Build universal APK
+        run: |
+          flutter build apk --release --no-tree-shake-icons
+          mkdir -p artifacts
+          cp build/app/outputs/flutter-apk/app-release.apk artifacts/nali-android-universal.apk
+      - name: Build ABI-specific APKs
+        run: |
+          flutter build apk --release --split-per-abi --no-tree-shake-icons
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk artifacts/
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk artifacts/
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk artifacts/
+      - name: Verify APK outputs
+        run: |
+          test -s artifacts/nali-android-universal.apk
+          test -s artifacts/app-arm64-v8a-release.apk
+          test -s artifacts/app-armeabi-v7a-release.apk
+          test -s artifacts/app-x86_64-release.apk
+      - uses: actions/upload-artifact@v4
         with:
-          name: nali-android-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: nali-android-apks
+          path: artifacts/*.apk
           if-no-files-found: error
           retention-days: 30
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nali-android-apks
+          path: release-assets
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*.apk
+          generate_release_notes: true
