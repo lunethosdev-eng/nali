@@ -251,6 +251,8 @@ def patch_search_page(text):
 
 
 def patch_dart_player(text):
+    if "int _playRequestToken" in text and "final requestToken" in text:
+        return text
     text = replace_once(text, "  bool _advancing = false;",
                         "  bool _advancing = false;\n  int _playRequestToken = 0;",
                         "PlayerController playback request token")
@@ -396,6 +398,10 @@ def patch_dart_player(text):
 
 
 def patch_native_player(text):
+    # Native playback is already integrated with the Android InnerTube bootstrap
+    # and request cancellation in this source tree.
+    if "AndroidInnerTubeBootstrap.install(context.applicationContext)" in text and "playQueueJob?.cancel()" in text:
+        return text
     text = replace_once(text, "import kotlinx.coroutines.Job",
                         "import kotlinx.coroutines.CancellationException\nimport kotlinx.coroutines.Job",
                         "Native PlayerController cancellation import")
@@ -517,6 +523,8 @@ def patch_native_player(text):
 
 
 def patch_youtube_stream_service(text):
+    if "Future<YoutubeResolvedStream> resolveDetailed(" in text:
+        return text
     if "class YoutubeResolvedStream" not in text:
         text = replace_once(
             text,
@@ -584,6 +592,8 @@ def patch_youtube_stream_service(text):
     return text[:start] + new + "\n" + text[end + 5:]
 
 def patch_music_player(text):
+    if "class _CanvasVideoBackground extends StatefulWidget" in text and "isPlaying: pc.isPlaying" in text:
+        return text
     text = replace_once(
         text,
         "import 'package:flutter/material.dart';",
