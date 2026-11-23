@@ -18,6 +18,8 @@ import com.google.common.util.concurrent.MoreExecutors
 import com.pokke.music.data.model.Song
 import com.pokke.music.data.repository.LocalLibraryStore
 import com.pokke.music.data.youtube.YouTubeStreamResolver
+import com.pokke.music.data.youtube.AndroidInnerTubeBootstrap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,8 @@ object PlayerController {
     private var pendingShuffle: Boolean? = null
     private var libraryStore: LocalLibraryStore? = null
     private var sleepTimerJob: Job? = null
+    private var playQueueJob: Job? = null
+    private var playRequestId: Long = 0L
     private val _sleepTimerRemainingMs = MutableStateFlow<Long?>(null)
     val sleepTimerRemainingMs: StateFlow<Long?> = _sleepTimerRemainingMs.asStateFlow()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -106,6 +110,7 @@ object PlayerController {
     }
 
     fun init(context: Context) {
+        AndroidInnerTubeBootstrap.install(context.applicationContext)
         if (libraryStore == null) libraryStore = LocalLibraryStore(context.applicationContext)
         if (controller != null || controllerFuture != null) return
         val token = SessionToken(context.applicationContext, ComponentName(context, PlaybackService::class.java))
@@ -215,72 +220,126 @@ object PlayerController {
         else playQueue(listOf(song) + extras, 0)
     }
 
-    fun playQueue(songs: List<Song>, startIndex: Int = 0) {
-        if (songs.isEmpty()) return
-        _playbackError.value = null
-        scope.launch {
-            val resolved = songs.map { song ->
-                val localAudio = song.audioUrl?.let { raw ->
-                    raw.startsWith("file://") || raw.startsWith("content://") || File(raw).isFile
-                } == true
-                if (localAudio) song
-                else {
-                    val ytId = song.youtubeId?.takeIf { it.isNotBlank() }
-                        ?: song.id.removePrefix("yt_").takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
-                    if (ytId.isNullOrBlank() || !song.audioUrl.isNullOrBlank()) song
-                    else runCatching {
-                        song.copy(
-                            youtubeId = ytId,
-                            audioUrl = YouTubeStreamResolver.resolve(ytId),
-                            coverUrl = song.coverUrl
-                                ?: "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
-                        )
-                    }.onFailure { error ->
-                        _playbackError.value = "No se pudo resolver ${song.title}: ${error.localizedMessage ?: "stream no disponible"}"
-                    }.getOrDefault(song)
-                }
-            }
-            val player = controller
-            if (player == null) {
-                pendingQueue = resolved to startIndex
-                return@launch
-            }
-            val playable = resolved.filter { !it.audioUrl.isNullOrBlank() }
-            if (playable.isEmpty()) {
-                _playbackError.value = _playbackError.value ?: "No hay audio reproducible en esta selección"
-                return@launch
-            }
-            val requested = resolved.getOrNull(startIndex)
-            val safeIndex = requested?.let { playable.indexOfFirst { item -> item.id == it.id } }
-                ?.takeIf { it >= 0 } ?: 0
-            _playbackError.value = null
-            _queue.value = playable
-            player.setMediaItems(playable.map(::toMediaItem), safeIndex, 0L)
-            player.prepare()
-            player.playWhenReady = true
-            player.play()
-            syncCurrentItem()
-        }
+    private suspend fun resolveSongForPlayback(song: Song): Song {
+        val localAudio = song.audioUrl?.let { raw ->
+            raw.startsWith("file://") || raw.startsWith("content://") || File(raw).isFile
+        } == true
+        if (localAudio) return song
+
+        val ytId = song.youtubeId?.takeIf { it.isNotBlank() }
+            ?: song.id.removePrefix("yt_").takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
+        if (ytId.isNullOrBlank()) return song
+
+        // Ignore a pre-existing URL for YouTube catalogue items: it may be a
+        // 30-second third-party preview or a stale signed stream.
+        return song.copy(
+            youtubeId = ytId,
+            audioUrl = YouTubeStreamResolver.resolve(ytId),
+            coverUrl = song.coverUrl ?: "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
+        )
     }
 
+    fun playQueue(songs: List<Song>, startIndex: Int = 0) {
+        if (songs.isEmpty()) return
+        val safeStart = startIndex.coerceIn(0, songs.lastIndex)
+        val ordered = songs.drop(safeStart) + songs.take(safeStart)
+        val selected = ordered.first()
+        val requestId = ++playRequestId
+        playQueueJob?.cancel()
+        _playbackError.value = null
+        _currentSong.value = selected
+        _isPlaying.value = false
+        _positionMs.value = 0L
+        _durationMs.value = selected.durationMs
+        _queue.value = emptyList()
+
+        val player = controller
+        if (player == null) {
+            pendingQueue = songs to safeStart
+            return
+        }
+
+        // Stop the previous preview before resolving the newly selected song.
+        runCatching {
+            player.stop()
+            player.clearMediaItems()
+        }
+
+        playQueueJob = scope.launch {
+            try {
+                val first = resolveSongForPlayback(selected)
+                if (requestId != playRequestId) return@launch
+                if (first.audioUrl.isNullOrBlank()) {
+                    throw IllegalStateException("InnerTube no devolvió un stream reproducible para ${first.title}")
+                }
+
+                _queue.value = listOf(first)
+                player.setMediaItems(listOf(toMediaItem(first)), 0, 0L)
+                player.prepare()
+                player.playWhenReady = true
+                player.play()
+                syncCurrentItem()
+
+                // The selected track starts first. Resolve the rest of the
+                // queue afterwards so old requests cannot replace this track.
+                for (next in ordered.drop(1)) {
+                    val resolvedNext = try {
+                        resolveSongForPlayback(next)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Throwable) {
+                        _playbackError.value = "No se pudo preparar ${next.title}: ${error.localizedMessage ?: "stream no disponible"}"
+                        null
+                    }
+                    if (requestId != playRequestId) return@launch
+                    if (resolvedNext != null && !resolvedNext.audioUrl.isNullOrBlank()) {
+                        player.addMediaItem(toMediaItem(resolvedNext))
+                        _queue.value = _queue.value + resolvedNext
+                    }
+                }
+                if (requestId == playRequestId) syncQueue()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                if (requestId == playRequestId) {
+                    runCatching {
+                        player.stop()
+                        player.clearMediaItems()
+                    }
+                    _queue.value = emptyList()
+                    _currentSong.value = selected
+                    _isPlaying.value = false
+                    _positionMs.value = 0L
+                    _playbackError.value =
+                        "No se pudo reproducir ${selected.title}: ${error.localizedMessage ?: "InnerTube no disponible"}"
+                }
+            }
+        }
+    }
     fun addToQueue(song: Song, playNext: Boolean = false) {
         scope.launch {
-            val localAudio = song.audioUrl?.let { raw -> raw.startsWith("file://") || raw.startsWith("content://") || File(raw).isFile } == true
+            val rawAudio = song.audioUrl.orEmpty()
+            val localAudio = rawAudio.startsWith("file://") ||
+                rawAudio.startsWith("content://") || File(rawAudio).isFile
             val ytId = song.youtubeId?.takeIf { it.isNotBlank() }
                 ?: song.id.removePrefix("yt_").takeIf { it.matches(Regex("[A-Za-z0-9_-]{11}")) }
-            val resolved = if (localAudio || (!song.audioUrl.isNullOrBlank() && ytId.isNullOrBlank())) song
-            else if (ytId.isNullOrBlank()) song
-            else runCatching {
-                song.copy(
-                    youtubeId = ytId,
-                    audioUrl = YouTubeStreamResolver.resolve(ytId),
-                    coverUrl = song.coverUrl ?: "https://i.ytimg.com/vi/$ytId/hqdefault.jpg"
-                )
-            }.getOrElse {
-                _playbackError.value = "No se pudo resolver el audio: ${it.localizedMessage ?: "error desconocido"}"
-                return@launch
-            }
+            val resolved = if (ytId != null && !localAudio) {
+                try {
+                    song.copy(
+                        youtubeId = ytId,
+                        audioUrl = YouTubeStreamResolver.resolve(ytId),
+                        coverUrl = song.coverUrl ?: "https://i.ytimg.com/vi/$ytId/hqdefault.jpg",
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    _playbackError.value =
+                        "No se pudo resolver el audio: ${error.localizedMessage ?: "error desconocido"}"
+                    return@launch
+                }
+            } else song
             val player = controller ?: return@launch
+            if (resolved.audioUrl.isNullOrBlank()) return@launch
             val insertAt = if (playNext) {
                 (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount)
             } else player.mediaItemCount
@@ -316,6 +375,11 @@ object PlayerController {
     }
 
     fun clearQueue() {
+        playQueueJob?.cancel()
+        playQueueJob = null
+        playRequestId++
+        pendingQueue = null
+        controller?.stop()
         controller?.clearMediaItems()
         _queue.value = emptyList()
         _currentSong.value = null
