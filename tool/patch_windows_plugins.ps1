@@ -2,6 +2,8 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $shareHeader = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\share_plus\windows\share_plus_windows_plugin.h'
 $vectorHeader = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\share_plus\windows\vector.h'
+$shareVectorHeader = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\share_plus\windows\share_plus_vector.h'
+if (-not (Test-Path $vectorHeader) -and (Test-Path $shareVectorHeader)) { $vectorHeader = $shareVectorHeader }
 $secureCpp = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\flutter_secure_storage_windows\windows\flutter_secure_storage_windows_plugin.cpp'
 
 function Write-Utf8NoBom([string]$Path, [string]$Content) {
@@ -57,6 +59,25 @@ foreach ($includeLine in $requiredIncludes) {
     }
 }
 Write-Utf8NoBom $vectorHeader $vectorText
+
+# The plugin's private header is named vector.h, which can collide with the
+# standard-library <vector> header on some MSVC include paths. Give it a
+# unique name and update the local include in the plugin translation unit.
+$sharePluginCpp = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\share_plus\windows\share_plus_plugin.cpp'
+if (Test-Path $sharePluginCpp) {
+    $pluginText = [System.IO.File]::ReadAllText($sharePluginCpp)
+    if ($pluginText -match '(?m)^\s*#include\s*"vector\.h"\s*$') {
+        if ((Test-Path $vectorHeader) -and -not (Test-Path $shareVectorHeader)) {
+            Move-Item -LiteralPath $vectorHeader -Destination $shareVectorHeader
+        }
+        $pluginText = [regex]::Replace(
+            $pluginText,
+            '(?m)^(\s*#include\s*)"vector\.h"(\s*)$',
+            '$1"share_plus_vector.h"$2'
+        )
+        Write-Utf8NoBom $sharePluginCpp $pluginText
+    }
+}
 
 # MSVC's strict conformance mode rejects the currently published
 # flutter_secure_storage_windows GetValueKey member definition (C4596).
