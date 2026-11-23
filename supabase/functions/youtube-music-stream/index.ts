@@ -7,9 +7,8 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-// YouTube.js needs a small JS evaluator to decipher signed media URLs. This is
-// the library's documented Deno/browser shim; the code being evaluated is the
-// public YouTube player script fetched by the library, not user input.
+// YouTube.js needs a JavaScript evaluator to decipher signed media URLs.
+// The evaluated source is YouTube's public player script, not user input.
 Platform.shim.eval = async (
   data: { output: string },
   env: Record<string, string | number | boolean | null | undefined>,
@@ -19,6 +18,37 @@ Platform.shim.eval = async (
   return new Function(...names, data.output)(...values);
 };
 
+// Supabase Edge egress can fail against www.youtube.com. Retry InnerTube API
+// calls through Google's API hostname before giving up; keep player-script
+// and googlevideo requests on their original hosts.
+const API_HOSTS = [
+  "youtubei.googleapis.com",
+  "www.youtube.com",
+  "music.youtube.com",
+] as const;
+
+const innertubeFetch: typeof fetch = async (input, init) => {
+  const request = new Request(input, init);
+  const original = new URL(request.url);
+  if (!original.pathname.startsWith("/youtubei/v1/")) {
+    return fetch(request);
+  }
+
+  const failures: string[] = [];
+  for (const host of API_HOSTS) {
+    const target = new URL(original);
+    target.hostname = host;
+    try {
+      const response = await fetch(new Request(target, request.clone()));
+      if (response.ok) return response;
+      failures.push(host + ":HTTP " + response.status);
+    } catch (error) {
+      failures.push(host + ":" + String(error).slice(0, 120));
+    }
+  }
+  throw new Error("InnerTube endpoint failed on all hosts (" + failures.join(" | ") + ")");
+};
+
 let clientPromise: Promise<Innertube> | null = null;
 function getClient(): Promise<Innertube> {
   clientPromise ??= Innertube.create({
@@ -26,17 +56,34 @@ function getClient(): Promise<Innertube> {
     location: "US",
     retrieve_player: true,
     enable_session_cache: true,
+    fetch: innertubeFetch,
   });
   return clientPromise;
 }
 
-const cache = new Map<string, { url: string; mime_type: string; expires: number }>();
+type CachedStream = {
+  url: string;
+  mime_type: string;
+  bitrate: number;
+  duration_seconds: number;
+  expires: number;
+};
+const cache = new Map<string, CachedStream>();
+
+const FORMAT_ATTEMPTS = [
+  { client: "TV_EMBEDDED", codec: "mp4a", format: "mp4" },
+  { client: "TV_EMBEDDED" },
+  { client: "ANDROID", codec: "mp4a", format: "mp4" },
+  { client: "ANDROID" },
+  { client: "WEB" },
+] as const;
 
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (request.method !== "POST") {
     return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
   }
+
   try {
     const body = await request.json();
     const videoId = String(body?.videoId ?? body?.youtube_id ?? "").trim();
@@ -46,45 +93,68 @@ Deno.serve(async (request: Request) => {
 
     const cached = cache.get(videoId);
     if (cached && cached.expires > Date.now()) {
-      return Response.json({ audio_url: cached.url, mime_type: cached.mime_type, provider: "youtube_music" }, {
-        headers: { ...CORS, "Cache-Control": "private, max-age=30" },
-      });
+      return Response.json({
+        audio_url: cached.url,
+        mime_type: cached.mime_type,
+        bitrate: cached.bitrate,
+        duration_seconds: cached.duration_seconds,
+        provider: "youtube_music",
+      }, { headers: { ...CORS, "Cache-Control": "private, max-age=30" } });
     }
 
     const client = await getClient();
-    let format: any = null;
     const failures: string[] = [];
-    // Tori's resolver uses non-Music player clients for playback because the
-    // YT Music client can return metadata while marking the stream unplayable.
-    for (const playerClient of ["ANDROID", "WEB"] as const) {
+    let selected: any = null;
+
+    // TV_EMBEDDED often exposes audio formats without the same restrictions
+    // as WEB/ANDROID. Prefer AAC/MP4 for browser compatibility, then allow the
+    // best available audio format as a fallback.
+    for (const attempt of FORMAT_ATTEMPTS) {
       try {
-        format = await client.getStreamingData(videoId, {
+        const format = await client.getStreamingData(videoId, {
           type: "audio",
           quality: "best",
-          client: playerClient,
+          ...attempt,
         });
-        if (format?.url) break;
+        const url = String(format?.url ?? "");
+        if (url.startsWith("https://") && new URL(url).hostname.endsWith("googlevideo.com")) {
+          selected = format;
+          break;
+        }
+        failures.push(attempt.client + ":no_usable_audio_format");
       } catch (error) {
-        failures.push(`${playerClient}: ${String(error).slice(0, 100)}`);
+        failures.push(attempt.client + "/" + ("codec" in attempt ? attempt.codec : "auto") + ":" + String(error).slice(0, 180));
       }
     }
-    const url = String(format?.url ?? "");
+
+    const url = String(selected?.url ?? "");
     if (!url.startsWith("https://") || !new URL(url).hostname.endsWith("googlevideo.com")) {
-      throw new Error(failures.join("; ") || "YouTube did not return a usable audio URL");
+      throw new Error(failures.join(" || ") || "YouTube returned no playable audio format");
     }
-    const mimeType = String(format?.mime_type ?? "audio/webm");
-    cache.set(videoId, { url, mime_type: mimeType, expires: Date.now() + 4 * 60 * 1000 });
-    return Response.json({
-      audio_url: url,
+
+    const mimeType = String(selected?.mime_type ?? "audio/mp4");
+    const durationSeconds = Math.max(0, Math.round(Number(selected?.approx_duration_ms ?? 0) / 1000));
+    const result: CachedStream = {
+      url,
       mime_type: mimeType,
-      bitrate: Number(format?.bitrate ?? 0),
+      bitrate: Number(selected?.bitrate ?? 0),
+      duration_seconds: durationSeconds,
+      expires: Date.now() + 3 * 60 * 1000,
+    };
+    cache.set(videoId, result);
+
+    return Response.json({
+      audio_url: result.url,
+      mime_type: result.mime_type,
+      bitrate: result.bitrate,
+      duration_seconds: result.duration_seconds,
       provider: "youtube_music",
     }, { headers: { ...CORS, "Cache-Control": "private, max-age=30" } });
   } catch (error) {
     console.error("youtube-music-stream:", error);
     return Response.json({
       error: "youtube_stream_unavailable",
-      detail: String(error).slice(0, 220),
+      detail: String(error).slice(0, 900),
     }, { status: 502, headers: CORS });
   }
 });
