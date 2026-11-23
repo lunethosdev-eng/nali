@@ -28,14 +28,15 @@ jobs:
           java-version: '17'
           cache: gradle
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
-          # The old "tools" SDK package no longer exists and breaks setup.
+          # Use current command-line tools so the Android 17 preview package is visible.
+          cmdline-tools-version: 15859902
           packages: platform-tools
-      - name: Install Android API 37
+      - name: Install Android 17 preview SDK (API 37)
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "platforms;android-37" "build-tools;37.0.0" "platform-tools"
+          sdkmanager --channel=3 "platforms;android-37" "build-tools;37.0.0" "platform-tools"
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
