@@ -24,23 +24,59 @@ if ($shareText -notmatch '(?m)^\s*#include\s*[<"]wrl\.h[>"]') {
 $shareText = $shareText.Replace('static std::wstring SharePlusWindowsPlugin::Utf16FromUtf8', 'static std::wstring Utf16FromUtf8')
 Write-Utf8NoBom $shareHeader $shareText
 
-# The published share_plus vector.h uses STL and WRL RuntimeClass types but
-# some revisions omit the direct headers required by MSVC.
+# share_plus's WinRT vector helper needs the Foundation collection ABI
+# declarations as well as the STL/WRL headers. The previous patch only added
+# vector + implements.h, which left ElementType/RuntimeClassT undefined.
 if (-not (Test-Path $vectorHeader)) {
     throw "share_plus vector.h not found: $vectorHeader. Run flutter pub get first."
 }
 $vectorText = [System.IO.File]::ReadAllText($vectorHeader)
-if ($vectorText -notmatch '(?m)^\s*#include\s*[<"]vector[>"]') {
-    $vectorText = $vectorText.Replace('#pragma once', "#pragma once`r`n`r`n#include <vector>")
+$requiredIncludes = @(
+    '#include <ivectorchangedeventargs.h>',
+    '#include <windows.foundation.collections.h>',
+    '#include <algorithm>',
+    '#include <iterator>',
+    '#include <utility>',
+    '#include <vector>',
+    '#include <wrl/implements.h>'
+)
+foreach ($includeLine in $requiredIncludes) {
+    $escaped = [regex]::Escape($includeLine)
+    if ($vectorText -notmatch "(?m)^\s*$escaped\s*$") {
+        $vectorText = [regex]::Replace(
+            $vectorText,
+            '(?m)^\s*#pragma once\s*',
+            ("#pragma once`r`n" + $includeLine + "`r`n"),
+            1
+        )
+    }
 }
-if ($vectorText -notmatch '(?m)^\s*#include\s*[<"]wrl/implements\.h[>"]') {
-    $vectorText = $vectorText.Replace('#include <vector>', "#include <vector>`r`n#include <wrl/implements.h>")
-}
-if ($vectorText -notmatch '(?m)^\s*#include\s*[<"]vector[>"]' -or
-    $vectorText -notmatch '(?m)^\s*#include\s*[<"]wrl/implements\.h[>"]') {
-    throw 'Could not add required STL/WRL headers to share_plus vector.h.'
+foreach ($includeLine in $requiredIncludes) {
+    if ($vectorText -notmatch "(?m)^\s*" + [regex]::Escape($includeLine) + "\s*$") {
+        throw "Could not add required include to share_plus vector.h: $includeLine"
+    }
 }
 Write-Utf8NoBom $vectorHeader $vectorText
+
+# MSVC's strict conformance mode rejects the currently published
+# flutter_secure_storage_windows GetValueKey member definition (C4596).
+# Override /permissive- for this plugin target only; don't weaken the whole app.
+$secureCmake = Join-Path $repoRoot 'windows\flutter\ephemeral\.plugin_symlinks\flutter_secure_storage_windows\windows\CMakeLists.txt'
+if (-not (Test-Path $secureCmake)) {
+    throw "flutter_secure_storage_windows CMakeLists.txt not found: $secureCmake. Run flutter pub get first."
+}
+$secureCmakeText = [System.IO.File]::ReadAllText($secureCmake)
+if ($secureCmakeText -notmatch '(?m)target_compile_options\(\$\{PLUGIN_NAME\} PRIVATE /permissive\)') {
+    $anchor = 'apply_standard_settings(${PLUGIN_NAME})'
+    if (-not $secureCmakeText.Contains($anchor)) {
+        throw 'Could not locate flutter_secure_storage_windows CMake target settings anchor.'
+    }
+    $secureCmakeText = $secureCmakeText.Replace(
+        $anchor,
+        $anchor + "`r`nif(MSVC)`r`n  target_compile_options(`${PLUGIN_NAME} PRIVATE /permissive)`r`nendif()"
+    )
+}
+Write-Utf8NoBom $secureCmake $secureCmakeText
 
 if (-not (Test-Path $secureCpp)) {
     throw "flutter_secure_storage Windows source not found: $secureCpp. Run flutter pub get first."
