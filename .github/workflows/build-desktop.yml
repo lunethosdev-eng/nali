@@ -1,4 +1,4 @@
-name: Build Linux and Windows desktop
+name: Build Linux, Flatpak and Windows desktop
 
 on:
   push:
@@ -13,34 +13,48 @@ permissions:
 
 jobs:
   linux:
-    runs-on: ubuntu-22.04
+    name: Linux ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: x86_64
+            runner: ubuntu-24.04
+            flutter_arch: x64
+            suffix: x64
+          - label: ARM64
+            runner: ubuntu-24.04-arm
+            flutter_arch: arm64
+            suffix: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
+      - name: Apply Nali playback/provider fixes
+        run: python tool/apply_nali_functional_patch.py
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          # The hosted Ubuntu 22.04 image can contain conflicting libunwind
-          # development packages; clear them before installing GStreamer.
-          sudo apt-get remove -y 'libunwind-*' || true
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsecret-1-dev libwebkit2gtk-4.0-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libsecret-1-dev libwebkit2gtk-4.1-dev
       - name: Enable Linux desktop
         run: flutter config --enable-linux-desktop
       - run: flutter pub get
       - name: Build Linux release
         run: flutter build linux --release
       - name: Package Linux bundle
-        run: tar -C build/linux/x64/release -czf nali-linux-x64.tar.gz bundle
+        run: tar -C build/linux/${{ matrix.flutter_arch }}/release -czf nali-linux-${{ matrix.suffix }}.tar.gz bundle
       - uses: actions/upload-artifact@v4
         with:
-          name: nali-linux-x64
-          path: nali-linux-x64.tar.gz
+          name: nali-linux-${{ matrix.suffix }}
+          path: nali-linux-${{ matrix.suffix }}.tar.gz
           if-no-files-found: error
+          retention-days: 30
 
   windows:
+    name: Windows x86_64
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
@@ -48,6 +62,8 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Apply Nali playback/provider fixes
+        run: python tool/apply_nali_functional_patch.py
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
       - run: flutter pub get
@@ -64,15 +80,53 @@ jobs:
           name: nali-windows-x64
           path: nali-windows-x64.zip
           if-no-files-found: error
+          retention-days: 30
+
+  flatpak:
+    name: Flatpak ${{ matrix.label }}
+    needs: [linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: x86_64
+            runner: ubuntu-24.04
+            arch: x86_64
+            suffix: x64
+          - label: ARM64
+            runner: ubuntu-24.04-arm
+            arch: aarch64
+            suffix: arm64
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: nali-linux-${{ matrix.suffix }}
+          path: linux-package
+      - name: Unpack Flutter Linux bundle
+        run: |
+          tar -xzf linux-package/nali-linux-${{ matrix.suffix }}.tar.gz
+          test -x bundle/nali
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: nali-linux-${{ matrix.suffix }}.flatpak
+          manifest-path: flatpak/io.github.lunethosdev_eng.Nali.yml
+          arch: ${{ matrix.arch }}
+          upload-artifact: true
+          artifact-name: nali-flatpak-${{ matrix.suffix }}
 
   publish-release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, windows]
-    runs-on: ubuntu-latest
+    needs: [linux, windows, flatpak]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
-      - name: Download desktop bundles
+      - name: Download all desktop packages
         uses: actions/download-artifact@v4
         with:
           pattern: nali-*
@@ -81,7 +135,5 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            release-assets/nali-linux-x64.tar.gz
-            release-assets/nali-windows-x64.zip
+          files: release-assets/*
           generate_release_notes: true
