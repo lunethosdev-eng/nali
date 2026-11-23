@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Nali
+Comment=Music player
+Exec=nali
+Icon=io.github.lunethosdev_eng.Nali
+Terminal=false
+Type=Application
+Categories=AudioVideo;Audio;Player;
+StartupNotify=true
