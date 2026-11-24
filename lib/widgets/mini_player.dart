@@ -23,6 +23,9 @@ class MiniPlayer extends StatefulWidget {
 
 class _MiniPlayerState extends State<MiniPlayer> {
   double _dragDx = 0;
+  double _dragDy = 0;
+  /// 0 = cover-only circle, 1 = play/pause+next, 2 = + previous, -1 = title+artist strip
+  int _compactLevel = 0;
   String? _lyricsText;
   String? _lyricsSongKey;
 
@@ -31,6 +34,15 @@ class _MiniPlayerState extends State<MiniPlayer> {
     super.initState();
     PlayerController.instance.addListener(_onPlayerChanged);
     _loadMiniLyrics();
+  }
+
+  @override
+  void didUpdateWidget(covariant MiniPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Reset expansion when leaving compact mode.
+    if (!widget.compact && _compactLevel != 0) {
+      _compactLevel = 0;
+    }
   }
 
   @override
@@ -180,15 +192,34 @@ class _MiniPlayerState extends State<MiniPlayer> {
         final animationDuration = settings.effectiveReduceAnimations
             ? Duration.zero
             : const Duration(milliseconds: 680);
+        final title = (song['title'] ?? '').toString();
+        final artist = (song['artist'] ?? '').toString();
 
         return LayoutBuilder(
           builder: (context, constraints) {
             final availableWidth = constraints.maxWidth.isFinite
                 ? constraints.maxWidth
                 : MediaQuery.of(context).size.width;
-            final targetWidth = collapse
-                ? 58.0
-                : (availableWidth - 32).clamp(58.0, 900.0).toDouble();
+
+            // Compact levels: circle / controls / +prev / title strip
+            double targetWidth;
+            double targetHeight;
+            if (!collapse) {
+              targetWidth = (availableWidth - 32).clamp(58.0, 900.0).toDouble();
+              targetHeight = height;
+            } else if (_compactLevel < 0) {
+              targetWidth = 168;
+              targetHeight = 52;
+            } else if (_compactLevel >= 2) {
+              targetWidth = 168;
+              targetHeight = 58;
+            } else if (_compactLevel == 1) {
+              targetWidth = 128;
+              targetHeight = 58;
+            } else {
+              targetWidth = 58;
+              targetHeight = 58;
+            }
 
             return AnimatedAlign(
               alignment: collapse ? alignment : Alignment.center,
@@ -200,23 +231,69 @@ class _MiniPlayerState extends State<MiniPlayer> {
                   duration: animationDuration,
                   curve: Curves.easeInOutCubic,
                   width: targetWidth,
-                  height: collapse ? 58.0 : height,
+                  height: targetHeight,
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(collapse ? 30 : 16),
+                    borderRadius: BorderRadius.circular(
+                      collapse && _compactLevel == 0 ? 29 : 16,
+                    ),
                   ),
                   child: GestureDetector(
-                    onTap: () => _openFull(context, song),
+                    onTap: () {
+                      if (collapse && _compactLevel == 0) {
+                        _openFull(context, song);
+                      } else if (!collapse) {
+                        _openFull(context, song);
+                      } else {
+                        PlayerController.instance.toggle();
+                      }
+                    },
                     onHorizontalDragUpdate: (details) {
                       _dragDx += details.delta.dx;
                     },
                     onHorizontalDragEnd: _onHorizontalEnd,
+                    onVerticalDragUpdate: (details) {
+                      if (!collapse) return;
+                      _dragDy += details.delta.dy;
+                    },
+                    onVerticalDragEnd: (details) {
+                      if (!collapse) return;
+                      final dy = _dragDy;
+                      _dragDy = 0;
+                      // Swipe up → expand controls; swipe down → title strip / collapse
+                      if (dy < -18) {
+                        setState(() {
+                          if (_compactLevel < 0) {
+                            _compactLevel = 0;
+                          } else if (_compactLevel < 2) {
+                            _compactLevel += 1;
+                          }
+                        });
+                      } else if (dy > 18) {
+                        setState(() {
+                          if (_compactLevel > 0) {
+                            _compactLevel -= 1;
+                          } else if (_compactLevel == 0) {
+                            _compactLevel = -1;
+                          } else {
+                            _compactLevel = 0;
+                          }
+                        });
+                      }
+                    },
                     child: LiquidGlass(
-                      borderRadius: BorderRadius.circular(collapse ? 30 : 16),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: collapse ? 5 : 8,
-                        ),
+                      borderRadius: BorderRadius.circular(
+                        collapse && _compactLevel == 0 ? 29 : 16,
+                      ),
+                      child: collapse
+                          ? _buildCompactBody(
+                              pc: pc,
+                              cover: cover,
+                              title: title,
+                              artist: artist,
+                            )
+                          : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
                         child: Row(
                           children: [
                             AnimatedContainer(
@@ -224,13 +301,11 @@ class _MiniPlayerState extends State<MiniPlayer> {
                                   ? Duration.zero
                                   : const Duration(milliseconds: 620),
                               curve: Curves.easeInOutCubic,
-                              width: collapse ? 48.0 : 44.0,
-                              height: collapse ? 48.0 : 44.0,
+                              width: 44.0,
+                              height: 44.0,
                               clipBehavior: Clip.antiAlias,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(
-                                  collapse ? 24 : 8,
-                                ),
+                                borderRadius: BorderRadius.circular(8),
                               ),
                               child: cover != null &&
                                       cover.toString().isNotEmpty
@@ -250,8 +325,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
                                       ),
                                     ),
                             ),
-                            if (!collapse) ...[
-                              const SizedBox(width: 10),
+                            const SizedBox(width: 10),
                               Expanded(
                                 child: ClipRect(
                                   child: AnimatedOpacity(
@@ -322,7 +396,6 @@ class _MiniPlayerState extends State<MiniPlayer> {
                                 ),
                                 onPressed: pc.playNextInQueue,
                               ),
-                            ],
                           ],
                         ),
                       ),
@@ -334,6 +407,115 @@ class _MiniPlayerState extends State<MiniPlayer> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildCompactBody({
+    required PlayerController pc,
+    required dynamic cover,
+    required String title,
+    required String artist,
+  }) {
+    final coverWidget = cover != null && cover.toString().isNotEmpty
+        ? Image.network(
+            cover.toString(),
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            errorBuilder: (_, __, ___) => const ColoredBox(
+              color: Colors.white12,
+              child: Icon(Icons.music_note_rounded, color: Colors.white38),
+            ),
+          )
+        : const ColoredBox(
+            color: Colors.white12,
+            child: Icon(Icons.music_note_rounded, color: Colors.white38),
+          );
+
+    // Level 0: full-bleed circular cover (no padding ring)
+    if (_compactLevel == 0) {
+      return ClipOval(child: coverWidget);
+    }
+
+    // Level -1: minimal title + artist strip
+    if (_compactLevel < 0) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(width: 36, height: 36, child: coverWidget),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                  ),
+                  Text(
+                    artist,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.55),
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Level 1/2: controls
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(width: 40, height: 40, child: coverWidget),
+          ),
+          if (_compactLevel >= 2)
+            IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              icon: const Icon(Icons.skip_previous_rounded,
+                  color: Colors.white70, size: 22),
+              onPressed: pc.playPreviousInQueue,
+            ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            icon: Icon(
+              pc.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 26,
+            ),
+            onPressed: pc.toggle,
+          ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            icon: const Icon(Icons.skip_next_rounded,
+                color: Colors.white70, size: 22),
+            onPressed: pc.playNextInQueue,
+          ),
+        ],
+      ),
     );
   }
 }
