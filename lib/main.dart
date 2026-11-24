@@ -32,11 +32,12 @@ import 'package:nali/pages/music_player.dart';
 import 'package:nali/pages/radio.dart';
 import 'package:nali/pages/search_page.dart';
 import 'package:nali/pages/library_page.dart';
-import 'package:nali/screens/profile_edit_screen.dart';
+import 'package:nali/screens/profile_edit_screen.dart' show ProfileEditScreen;
 import 'package:nali/screens/admin_screen.dart';
 import 'package:nali/screens/settings_screen.dart';
 import 'package:nali/screens/mix_editor_screen.dart';
-import 'package:nali/screens/player_layout_editor_screen.dart';
+import 'package:nali/screens/player_layout_editor_screen.dart'
+    show PlayerLayoutEditorScreen;
 import 'package:nali/screens/playlists_screen.dart';
 import 'package:nali/screens/wrap_screen.dart';
 import 'package:nali/screens/local_import_screen.dart';
