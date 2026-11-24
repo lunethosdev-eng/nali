@@ -498,22 +498,22 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
                               _hoverIndex != null)
                             Positioned(
                               left: mainLeft +
-                                  (_dragX - 30).clamp(4.0, mainW - 64),
-                              top: 6,
+                                  (_dragX - 36).clamp(2.0, mainW - 76),
+                              top: 0,
                               child: ScaleTransition(
                                 scale: _bubbleScale,
                                 child: CustomPaint(
-                                  size: const Size(60, 52),
+                                  size: const Size(72, 64),
                                   painter: _LiquidBubblePainter(
                                     velocity: _velocity,
                                   ),
                                   child: SizedBox(
-                                    width: 60,
-                                    height: 52,
+                                    width: 72,
+                                    height: 64,
                                     child: Center(
                                       child: Icon(
                                         _icons[_hoverIndex!],
-                                        size: 26,
+                                        size: 28,
                                         color: const Color(0xfffc3c44),
                                       ),
                                     ),
@@ -552,24 +552,26 @@ class _LiquidBubblePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final baseRx = size.width * 0.38;
-    final baseRy = size.height * 0.40;
+    // Larger base so the bubble reads as a real liquid glass orb.
+    final baseRx = size.width * 0.42;
+    final baseRy = size.height * 0.42;
 
     final speed = velocity.abs();
-    final stretch = (0.14 + (speed / 18.0) * 0.86).clamp(0.14, 1.0);
+    final stretch = (0.10 + (speed / 16.0) * 0.95).clamp(0.10, 1.15);
     final dir = velocity >= 0 ? -1.0 : 1.0;
 
     final path = Path();
-    const steps = 56;
+    const steps = 64;
     for (int i = 0; i <= steps; i++) {
       final t = i / steps * math.pi * 2;
-      final egg = 1.0 + 0.09 * math.sin(t - math.pi / 2);
-      final rx = baseRx * egg * (1 + stretch * 0.42);
-      final ry = baseRy * egg * (1 - stretch * 0.22);
-      final lag = math.cos(t) * dir * stretch * baseRx * 0.38;
-      final wave = math.sin(t * 2.2) * stretch * 1.6;
+      // Soft organic deformation (liquid), not hard egg + heavy gradient.
+      final wobble = 1.0 + 0.06 * math.sin(t * 2 + dir) * stretch;
+      final rx = baseRx * wobble * (1 + stretch * 0.38);
+      final ry = baseRy * wobble * (1 - stretch * 0.18);
+      final lag = math.cos(t) * dir * stretch * baseRx * 0.45;
+      final wave = math.sin(t * 1.8 + stretch) * stretch * 2.2;
       final x = cx + rx * math.cos(t) + lag;
-      final y = cy + ry * math.sin(t) + wave * 0.35;
+      final y = cy + ry * math.sin(t) + wave * 0.28;
       if (i == 0) {
         path.moveTo(x, y);
       } else {
@@ -580,42 +582,50 @@ class _LiquidBubblePainter extends CustomPainter {
 
     final rect = Offset.zero & size;
 
+    // Soft shadow
     canvas.drawPath(
-      path.shift(const Offset(0, 2)),
+      path.shift(const Offset(0, 3)),
       Paint()
-        ..color = Colors.black.withOpacity(0.22)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+        ..color = Colors.black.withOpacity(0.28)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
 
+    // Near-flat glass fill (matches LiquidGlass nav, not candy gradient)
     final fill = Paint()
       ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
         colors: [
-          Colors.white.withOpacity(0.28),
-          Colors.white.withOpacity(0.14),
+          Colors.white.withOpacity(0.22),
+          Colors.white.withOpacity(0.10),
+          Colors.white.withOpacity(0.08),
         ],
+        stops: const [0.0, 0.55, 1.0],
       ).createShader(rect);
     canvas.drawPath(path, fill);
 
+    // Crisp glass edge
     canvas.drawPath(
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0
-        ..color = Colors.white.withOpacity(0.48),
+        ..strokeWidth = 1.15
+        ..color = Colors.white.withOpacity(0.55),
     );
 
+    // Thin specular rim (top only) instead of big white gradient slab
     canvas.save();
     canvas.clipPath(path);
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height * 0.38),
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx, cy - size.height * 0.18),
+        width: size.width * 0.55,
+        height: size.height * 0.22,
+      ),
       Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+        ..shader = RadialGradient(
           colors: [
-            Colors.white.withOpacity(0.42),
+            Colors.white.withOpacity(0.35),
             Colors.white.withOpacity(0.0),
           ],
         ).createShader(rect),
