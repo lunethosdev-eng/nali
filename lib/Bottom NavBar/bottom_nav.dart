@@ -99,6 +99,10 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
   }
 
   bool _onScroll(ScrollNotification n) {
+    // Only react to vertical page scroll. Horizontal carousels ("Para ti",
+    // "Escuchado recientemente", etc.) must never collapse the nav / mini player.
+    if (n.metrics.axis != Axis.vertical) return false;
+
     final playing = PlayerController.instance.current != null;
     if (!playing) {
       if (_navCollapsed) _setCollapsed(false);
