@@ -476,7 +476,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _canvasSwitch('spotify', t('Canvas de Spotify', 'Spotify Canvas'), _spotifyCanvas),
                   _canvasSwitch('external', t('Fuentes externas', 'External sources'), _externalCanvas),
                   _canvasSwitch('repeat', t('Repetir Canvas', 'Repeat Canvas'), _canvasRepeat),
-                  _canvasSwitch('animatedCovers', t('Portadas animadas BitChord', 'BitChord animated covers'), _animatedCovers),
+                  _canvasSwitch('animatedCovers', t('Portadas animadas', 'Animated covers'), _animatedCovers),
                 ])),
                 _incompleteNote(t('Las preferencias se guardan en este dispositivo. La reproducción de Canvas depende de la fuente y de las capacidades de la plataforma.', 'Preferences are saved on this device. Canvas playback depends on source and platform capabilities.')),
               ],
