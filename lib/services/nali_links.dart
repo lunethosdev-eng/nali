@@ -47,11 +47,14 @@ class NaliLinks {
     return '$prefix\n$link';
   }
 
+  /// share_plus 10.x API (Share.share). SharePlus/ShareParams is 12.x-only
+  /// and broke Windows CI with the newer C++ plugin headers.
   static Future<void> share(String title, Uri link,
       {String? description}) async {
-    await SharePlus.instance.share(ShareParams(
-      text: message(title, link, description: description),
-    ));
+    await Share.share(
+      message(title, link, description: description),
+      subject: title,
+    );
   }
 }
 
@@ -79,21 +82,37 @@ class NaliSharedLink {
     } else if (incoming.scheme == 'pokke' || incoming.scheme == 'nali') {
       final segments = incoming.pathSegments;
       final rawKind = incoming.host == 'share'
-          ? segments.isNotEmpty ? segments.first : ''
+          ? segments.isNotEmpty
+              ? segments.first
+              : ''
           : incoming.host;
-      final kind = rawKind == 'user' ? 'profile' : rawKind == 'track' ? 'song' : rawKind;
+      final kind = rawKind == 'user'
+          ? 'profile'
+          : rawKind == 'track'
+              ? 'song'
+              : rawKind;
       final id = incoming.host == 'share'
-          ? segments.length > 1 ? segments[1] : ''
-          : segments.isNotEmpty ? segments.first : '';
+          ? segments.length > 1
+              ? segments[1]
+              : ''
+          : segments.isNotEmpty
+              ? segments.first
+              : '';
       if (kind.isEmpty || id.isEmpty) return null;
       return NaliSharedLink(kind: kind, id: id);
     }
 
-    final segments = route.pathSegments.where((part) => part.isNotEmpty).toList();
+    final segments =
+        route.pathSegments.where((part) => part.isNotEmpty).toList();
     if (segments.length < 2) return null;
     final kind = segments[0].toLowerCase();
     const supported = {
-      'song', 'playlist', 'profile', 'artist', 'album', 'lyrics',
+      'song',
+      'playlist',
+      'profile',
+      'artist',
+      'album',
+      'lyrics',
     };
     if (!supported.contains(kind)) return null;
     return NaliSharedLink(
