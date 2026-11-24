@@ -548,12 +548,85 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               const SizedBox(height: 12),
               Text(t('Mangas favoritos', 'Favorite manga'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: _favoriteMangas.map((m) => InputChip(
-                avatar: m['cover'] == null ? const Icon(Icons.book, size: 16) : ClipRRect(borderRadius: BorderRadius.circular(3), child: Image.network(m['cover']!, width: 24, height: 28, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.book, size: 16))),
-                label: Text(m['title'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
-                onDeleted: () => setState(() => _favoriteMangas.removeWhere((item) => item['id'] == m['id'])),
-                backgroundColor: Colors.white10, labelStyle: const TextStyle(color: Colors.white), deleteIconColor: Colors.white70,
-              )).toList()),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _favoriteMangas.map((m) {
+                  final cover = (m['cover'] ?? '').toString();
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 88,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ClipRRect(
+                              borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(12)),
+                              child: AspectRatio(
+                                aspectRatio: 0.7,
+                                child: cover.startsWith('http')
+                                    ? Image.network(
+                                        cover,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            const ColoredBox(
+                                          color: Colors.white12,
+                                          child: Icon(Icons.menu_book_rounded,
+                                              color: Colors.white38),
+                                        ),
+                                      )
+                                    : const ColoredBox(
+                                        color: Colors.white12,
+                                        child: Icon(Icons.menu_book_rounded,
+                                            color: Colors.white38),
+                                      ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
+                              child: Text(
+                                m['title'] ?? '',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  height: 1.2,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Positioned(
+                        top: -6,
+                        right: -6,
+                        child: Material(
+                          color: const Color(0xFF2A2A2E),
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () => setState(() => _favoriteMangas
+                                .removeWhere((item) => item['id'] == m['id'])),
+                            child: const Padding(
+                              padding: EdgeInsets.all(4),
+                              child: Icon(Icons.close, size: 14, color: Colors.white70),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
               const SizedBox(height: 8),
               OutlinedButton.icon(
                 onPressed: _favoriteMangas.length >= 12 ? null : _showMangaPicker,
