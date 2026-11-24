@@ -201,42 +201,48 @@ class _MiniPlayerState extends State<MiniPlayer> {
                 ? constraints.maxWidth
                 : MediaQuery.of(context).size.width;
 
-            // Compact levels: circle / controls / +prev / title strip
+            // Compact expands VERTICALLY only (never horizontal control strip).
+            //  0  = circle cover
+            //  1  = cover + play/pause stacked above
+            //  2  = + previous / next
+            // -1  = title + artist strip above the circle
             double targetWidth;
             double targetHeight;
             if (!collapse) {
               targetWidth = (availableWidth - 32).clamp(58.0, 900.0).toDouble();
               targetHeight = height;
             } else if (_compactLevel < 0) {
-              targetWidth = 168;
-              targetHeight = 52;
+              targetWidth = 64;
+              targetHeight = 118;
             } else if (_compactLevel >= 2) {
-              targetWidth = 168;
-              targetHeight = 58;
+              targetWidth = 64;
+              targetHeight = 196;
             } else if (_compactLevel == 1) {
-              targetWidth = 128;
-              targetHeight = 58;
+              targetWidth = 64;
+              targetHeight = 132;
             } else {
               targetWidth = 58;
               targetHeight = 58;
             }
 
+            final compactRadius = collapse
+                ? (_compactLevel == 0 ? 29.0 : 22.0)
+                : 16.0;
+
             return AnimatedAlign(
               alignment: collapse ? alignment : Alignment.center,
               duration: animationDuration,
-              curve: Curves.easeInOutCubic,
+              curve: Curves.easeOutCubic,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: AnimatedContainer(
                   duration: animationDuration,
-                  curve: Curves.easeInOutCubic,
+                  curve: const Cubic(0.22, 1.0, 0.36, 1.0),
                   width: targetWidth,
                   height: targetHeight,
                   clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(
-                      collapse && _compactLevel == 0 ? 29 : 16,
-                    ),
+                    borderRadius: BorderRadius.circular(compactRadius),
                   ),
                   child: GestureDetector(
                     onTap: () {
@@ -249,9 +255,13 @@ class _MiniPlayerState extends State<MiniPlayer> {
                       }
                     },
                     onHorizontalDragUpdate: (details) {
+                      if (collapse) return; // horizontal only in expanded mini
                       _dragDx += details.delta.dx;
                     },
-                    onHorizontalDragEnd: _onHorizontalEnd,
+                    onHorizontalDragEnd: (d) {
+                      if (collapse) return;
+                      _onHorizontalEnd(d);
+                    },
                     onVerticalDragUpdate: (details) {
                       if (!collapse) return;
                       _dragDy += details.delta.dy;
@@ -260,8 +270,8 @@ class _MiniPlayerState extends State<MiniPlayer> {
                       if (!collapse) return;
                       final dy = _dragDy;
                       _dragDy = 0;
-                      // Swipe up → expand controls; swipe down → title strip / collapse
-                      if (dy < -18) {
+                      // Swipe UP → grow control stack; DOWN → title strip / collapse
+                      if (dy < -16) {
                         setState(() {
                           if (_compactLevel < 0) {
                             _compactLevel = 0;
@@ -269,7 +279,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
                             _compactLevel += 1;
                           }
                         });
-                      } else if (dy > 18) {
+                      } else if (dy > 16) {
                         setState(() {
                           if (_compactLevel > 0) {
                             _compactLevel -= 1;
@@ -282,9 +292,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
                       }
                     },
                     child: LiquidGlass(
-                      borderRadius: BorderRadius.circular(
-                        collapse && _compactLevel == 0 ? 29 : 16,
-                      ),
+                      borderRadius: BorderRadius.circular(compactRadius),
                       child: collapse
                           ? _buildCompactBody(
                               pc: pc,
@@ -432,89 +440,123 @@ class _MiniPlayerState extends State<MiniPlayer> {
             child: Icon(Icons.music_note_rounded, color: Colors.white38),
           );
 
-    // Level 0: full-bleed circular cover (no padding ring)
+    // Level 0: full-bleed circular cover
     if (_compactLevel == 0) {
       return ClipOval(child: coverWidget);
     }
 
-    // Level -1: minimal title + artist strip
+    // Level -1: vertical stack — title/artist above a small cover
     if (_compactLevel < 0) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(6, 8, 6, 6),
+        child: Column(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(width: 36, height: 36, child: coverWidget),
-            ),
-            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
-                      fontSize: 11,
+                      fontSize: 10,
+                      height: 1.15,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     artist,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.55),
-                      fontSize: 10,
+                      fontSize: 9,
                     ),
                   ),
                 ],
               ),
+            ),
+            ClipOval(
+              child: SizedBox(width: 40, height: 40, child: coverWidget),
             ),
           ],
         ),
       );
     }
 
-    // Level 1/2: controls
+    // Level 1/2: VERTICAL control stack growing upward from the cover
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      child: Row(
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      child: Column(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(width: 40, height: 40, child: coverWidget),
-          ),
-          if (_compactLevel >= 2)
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              icon: const Icon(Icons.skip_previous_rounded,
-                  color: Colors.white70, size: 22),
-              onPressed: pc.playPreviousInQueue,
+          // Controls sit ABOVE the cover
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                if (_compactLevel >= 2)
+                  _CompactIconBtn(
+                    icon: Icons.skip_previous_rounded,
+                    onTap: pc.playPreviousInQueue,
+                  ),
+                _CompactIconBtn(
+                  icon: pc.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                  onTap: pc.toggle,
+                  emphasize: true,
+                ),
+                _CompactIconBtn(
+                  icon: Icons.skip_next_rounded,
+                  onTap: pc.playNextInQueue,
+                ),
+                const SizedBox(height: 4),
+              ],
             ),
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-            icon: Icon(
-              pc.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              color: Colors.white,
-              size: 26,
-            ),
-            onPressed: pc.toggle,
           ),
-          IconButton(
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            icon: const Icon(Icons.skip_next_rounded,
-                color: Colors.white70, size: 22),
-            onPressed: pc.playNextInQueue,
+          ClipOval(
+            child: SizedBox(
+              width: _compactLevel >= 2 ? 44 : 48,
+              height: _compactLevel >= 2 ? 44 : 48,
+              child: coverWidget,
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CompactIconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool emphasize;
+  const _CompactIconBtn({
+    required this.icon,
+    required this.onTap,
+    this.emphasize = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Icon(
+            icon,
+            color: emphasize ? Colors.white : Colors.white70,
+            size: emphasize ? 26 : 22,
+          ),
+        ),
       ),
     );
   }
