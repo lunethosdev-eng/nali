@@ -19,6 +19,8 @@ class _ArtistPageState extends State<ArtistPage> {
   List<Map<String, dynamic>> _songs = [];
   bool _loading = true;
   bool _following = false;
+  String? _bio;
+  String? _bioSourceUrl;
 
   String t(String es, String en) => SettingsService.instance.locale == 'en' ? en : es;
 
@@ -66,6 +68,27 @@ class _ArtistPageState extends State<ArtistPage> {
         _imageUrl = await ArtistImageService.imageFor(_name);
       }
       _following = await FollowService.isFollowing(_name);
+      // Wikipedia bio via Edge Function (no CORS)
+      try {
+        final bioRes = await SupabaseService.kokoro.functions.invoke(
+          'artist-bio',
+          body: {'artist': _name},
+        ).timeout(const Duration(seconds: 14));
+        final payload = bioRes.data;
+        if (payload is Map) {
+          final text = (payload['bio'] ?? '').toString().trim();
+          if (text.isNotEmpty) {
+            _bio = text;
+            _bioSourceUrl = payload['page_url']?.toString();
+            final thumb = payload['thumbnail']?.toString();
+            if ((_imageUrl == null || _imageUrl!.isEmpty) &&
+                thumb != null &&
+                thumb.startsWith('http')) {
+              _imageUrl = thumb;
+            }
+          }
+        }
+      } catch (_) {}
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -179,6 +202,52 @@ class _ArtistPageState extends State<ArtistPage> {
                     ),
                   ),
                 ),
+                if (_bio != null && _bio!.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                      child: LiquidGlass(
+                        blur: 16,
+                        opacity: 0.1,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                t('Sobre el artista', 'About the artist'),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _bio!,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.72),
+                                  height: 1.4,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              if (_bioSourceUrl != null) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  t('Fuente: Wikipedia', 'Source: Wikipedia'),
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.35),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_songs.isEmpty)
                   const SliverFillRemaining(
                     child: Center(
