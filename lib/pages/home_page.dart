@@ -13,6 +13,7 @@ import 'package:nali/services/unified_search_service.dart';
 import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/custom_provider_service.dart';
 import 'package:nali/services/native_player_bridge.dart';
+import 'package:nali/services/artist_image_service.dart';
 
 class HomePage extends StatefulWidget {
   HomePage({super.key});
@@ -370,36 +371,44 @@ class _HomePageState extends State<HomePage> {
                                   const SizedBox(width: 14),
                               itemBuilder: (_, i) {
                                 final a = _followedArtists[i];
-                                final img = a['artist_image'] ?? a['image_url'];
                                 final name =
                                     (a['artist_name'] ?? a['name'] ?? '')
                                         .toString();
-                                return Column(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 36,
-                                      backgroundColor: Colors.white12,
-                                      backgroundImage: img != null
-                                          ? NetworkImage(img.toString())
-                                          : null,
-                                      child: img == null
-                                          ? const Icon(Icons.person,
-                                              color: Colors.white38)
-                                          : null,
+                                final storedImg =
+                                    (a['artist_image'] ?? a['image_url'] ?? '')
+                                        .toString();
+                                return GestureDetector(
+                                  onTap: () {
+                                    if (name.isEmpty) return;
+                                    Navigator.of(context).pushNamed(
+                                      '/artist',
+                                      arguments: {
+                                        'name': name,
+                                        if (storedImg.startsWith('http'))
+                                          'image_url': storedImg,
+                                      },
+                                    );
+                                  },
+                                  child: SizedBox(
+                                    width: 80,
+                                    child: Column(
+                                      children: [
+                                        _FollowedArtistAvatar(
+                                          name: name,
+                                          storedImage: storedImg,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                              color: Colors.white, fontSize: 12),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 6),
-                                    SizedBox(
-                                      width: 72,
-                                      child: Text(
-                                        name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: const TextStyle(
-                                            color: Colors.white, fontSize: 12),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 );
                               },
                             ),
@@ -416,6 +425,49 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Resolves artist image via Deezer when the follow row has no stored photo.
+class _FollowedArtistAvatar extends StatefulWidget {
+  final String name;
+  final String storedImage;
+  const _FollowedArtistAvatar({required this.name, required this.storedImage});
+
+  @override
+  State<_FollowedArtistAvatar> createState() => _FollowedArtistAvatarState();
+}
+
+class _FollowedArtistAvatarState extends State<_FollowedArtistAvatar> {
+  String? _resolved;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    if (widget.storedImage.startsWith('http')) {
+      _resolved = widget.storedImage;
+      return;
+    }
+    final img = await ArtistImageService.imageFor(widget.name);
+    if (mounted && img != null) setState(() => _resolved = img);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final img = _resolved ??
+        (widget.storedImage.startsWith('http') ? widget.storedImage : null);
+    return CircleAvatar(
+      radius: 36,
+      backgroundColor: Colors.white12,
+      backgroundImage: img != null ? NetworkImage(img) : null,
+      child: img == null
+          ? const Icon(Icons.person, color: Colors.white38)
+          : null,
     );
   }
 }
