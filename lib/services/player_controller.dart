@@ -10,6 +10,7 @@ import 'package:nali/services/supabase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nali/services/native_player_bridge.dart';
 import 'package:nali/services/youtube_stream_service.dart';
+import 'package:nali/services/apple_artwork_service.dart';
 
 class PlayerController extends ChangeNotifier {
   static final PlayerController instance = PlayerController._();
@@ -403,6 +404,10 @@ class PlayerController extends ChangeNotifier {
     _preloadedIndex = -1;
     notifyListeners();
 
+    if (selectedSong['is_local'] != true) {
+      unawaited(_resolveAppleArtwork(selectedSong, requestToken));
+    }
+
     try {
       await _serializeAudio(() async {
         await _playerA.stop();
@@ -514,6 +519,35 @@ class PlayerController extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  Future<void> _resolveAppleArtwork(
+    Map<String, dynamic> song,
+    int requestToken,
+  ) async {
+    final title = (song['title'] ?? '').toString();
+    final artist = (song['artist'] ?? '').toString();
+    final album = song['album']?.toString();
+    final artwork = await AppleArtworkService.instance.resolve(
+      title: title,
+      artist: artist,
+      album: album,
+    );
+    if (artwork == null || requestToken != _playRequestToken) return;
+
+    final key = _songKey(song);
+    song['cover_url'] = artwork;
+    song['artwork_url'] = artwork;
+    if (currentSong != null && _songKey(currentSong!) == key) {
+      currentSong = Map<String, dynamic>.from(song);
+    }
+    for (var index = 0; index < queue.length; index++) {
+      if (_songKey(queue[index]) == key) {
+        queue[index]['cover_url'] = artwork;
+        queue[index]['artwork_url'] = artwork;
+      }
+    }
+    notifyListeners();
   }
 
   Future<void> _recordPlay(Map<String, dynamic> song) async {
