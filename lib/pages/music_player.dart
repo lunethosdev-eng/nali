@@ -92,6 +92,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
   double _dragDy = 0;
   List<Map<String, dynamic>> _queue = [];
   late AnimationController _lyricsAnim;
+  late AnimationController _playBounce;
   double _karaokeFillMult = 1.2;
 
   String t(String es, String en) => SettingsService.instance.locale == 'en' ? en : es;
@@ -153,6 +154,10 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
       vsync: this,
       duration: const Duration(milliseconds: 420),
     );
+    _playBounce = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 280),
+    );
     _loadQueue();
     HeadphoneService.instance.start();
   }
@@ -172,6 +177,7 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
   @override
   void dispose() {
     _lyricsAnim.dispose();
+    _playBounce.dispose();
     super.dispose();
   }
 
@@ -1554,20 +1560,45 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
                                       color: Colors.white),
                                 ),
                                 GestureDetector(
-                                  onTap: pc.toggle,
-                                  child: Container(
-                                    width: 68,
-                                    height: 68,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      pc.isPlaying
-                                          ? Icons.pause_rounded
-                                          : Icons.play_arrow_rounded,
-                                      size: 40,
-                                      color: Colors.black,
+                                  onTap: () async {
+                                    // Bounce: press in then spring out
+                                    await _playBounce.forward(from: 0);
+                                    await _playBounce.reverse();
+                                    pc.toggle();
+                                  },
+                                  child: AnimatedBuilder(
+                                    animation: _playBounce,
+                                    builder: (context, child) {
+                                      final t = Curves.easeOutBack
+                                          .transform(_playBounce.value);
+                                      final scale = 1.0 - 0.12 * t;
+                                      return Transform.scale(
+                                        scale: scale,
+                                        child: child,
+                                      );
+                                    },
+                                    child: Container(
+                                      width: 68,
+                                      height: 68,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.white
+                                                .withOpacity(0.25),
+                                            blurRadius: 16,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: Icon(
+                                        pc.isPlaying
+                                            ? Icons.pause_rounded
+                                            : Icons.play_arrow_rounded,
+                                        size: 40,
+                                        color: Colors.black,
+                                      ),
                                     ),
                                   ),
                                 ),
