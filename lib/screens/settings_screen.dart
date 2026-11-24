@@ -990,8 +990,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
             where: '',
             onTap: () {
               Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => SettingsScreen(category: item.$1),
+                PageRouteBuilder<void>(
+                  transitionDuration: const Duration(milliseconds: 380),
+                  reverseTransitionDuration:
+                      const Duration(milliseconds: 300),
+                  pageBuilder: (_, __, ___) =>
+                      SettingsScreen(category: item.$1),
+                  transitionsBuilder: (context, anim, secondary, child) {
+                    final curved = CurvedAnimation(
+                      parent: anim,
+                      curve: Curves.easeOutCubic,
+                      reverseCurve: Curves.easeInCubic,
+                    );
+                    return FadeTransition(
+                      opacity: curved,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0.06, 0.04),
+                          end: Offset.zero,
+                        ).animate(curved),
+                        child: ScaleTransition(
+                          scale: Tween<double>(begin: 0.96, end: 1)
+                              .animate(curved),
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               );
             },
