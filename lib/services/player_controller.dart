@@ -554,6 +554,42 @@ class PlayerController extends ChangeNotifier {
           notifyListeners();
         }
       }));
+      // YouTube: if the stream never advances (URL dead / wrong client),
+      // force a fresh InnerTube resolve once and retry play.
+      if (isYouTube) {
+        unawaited(Future.delayed(const Duration(milliseconds: 2200), () async {
+          if (requestToken != _playRequestToken) return;
+          if (position.inMilliseconds > 400) return;
+          try {
+            final st = await _active.state;
+            if (st == PlayerState.playing && position.inMilliseconds > 200) {
+              return;
+            }
+            final vid = (selectedSong['youtube_id'] ?? '').toString();
+            if (vid.length != 11) return;
+            debugPrint('YouTube stream stuck at 0 — forcing re-resolve');
+            final again = await YoutubeStreamService.instance
+                .resolveDetailed(vid, force: true);
+            if (requestToken != _playRequestToken) return;
+            await _serializeAudio(() async {
+              if (requestToken != _playRequestToken) return;
+              await _active.stop();
+              await _active.play(UrlSource(again.url));
+              isPlaying = true;
+              if (again.durationSeconds != null &&
+                  again.durationSeconds! > 0) {
+                duration = Duration(seconds: again.durationSeconds!);
+                selectedSong['duration_seconds'] = again.durationSeconds;
+              }
+              selectedSong['audio_url'] = again.url;
+              currentSong = Map<String, dynamic>.from(selectedSong);
+              notifyListeners();
+            });
+          } catch (e) {
+            debugPrint('YouTube force re-resolve failed: $e');
+          }
+        }));
+      }
       unawaited(Future.delayed(const Duration(milliseconds: 400), () {
         if (requestToken == _playRequestToken) _preloadNext();
       }));
