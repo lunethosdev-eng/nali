@@ -1,7 +1,8 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'package:nali/services/supabase_service.dart';
 
-/// Free artist image lookup via Deezer public API (no key).
+/// Artist photo lookup via Kokoro Edge Function → Deezer.
+/// Direct browser calls to api.deezer.com fail CORS on web; the function does not.
 class ArtistImageService {
   static final Map<String, String?> _cache = {};
 
@@ -11,20 +12,22 @@ class ArtistImageService {
     if (_cache.containsKey(key)) return _cache[key];
 
     try {
-      final q = Uri.encodeComponent(artistName);
-      final uri = Uri.parse('https://api.deezer.com/search/artist?q=$q&limit=1');
-      final res = await http.get(uri);
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body) as Map<String, dynamic>;
-        final list = data['data'] as List?;
-        if (list != null && list.isNotEmpty) {
-          final img = list.first['picture_medium']?.toString() ??
-              list.first['picture']?.toString();
-          _cache[key] = img;
-          return img;
-        }
+      final response = await SupabaseService.kokoro.functions
+          .invoke(
+            'artist-image',
+            body: {'artist': artistName.trim()},
+          )
+          .timeout(const Duration(seconds: 12));
+      final payload = response.data;
+      final url =
+          payload is Map ? (payload['image_url'] ?? '').toString() : '';
+      if (url.startsWith('http')) {
+        _cache[key] = url;
+        return url;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('ArtistImageService: $e');
+    }
     _cache[key] = null;
     return null;
   }
