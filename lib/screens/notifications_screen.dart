@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nali/services/notification_service.dart';
 import 'package:nali/services/player_controller.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/artist_image_service.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -129,18 +130,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 6),
-                            leading: ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: cover.startsWith('http')
-                                  ? Image.network(
-                                      cover,
-                                      width: 52,
-                                      height: 52,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) =>
-                                          _fallbackCover(n),
-                                    )
-                                  : _fallbackCover(n),
+                            leading: _NotifCover(
+                              cover: cover,
+                              artist: (n['title'] ?? '').toString(),
+                              fallback: _fallbackCover(n),
                             ),
                             title: Text(
                               n['title'] ?? '',
@@ -200,6 +193,54 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ),
         );
       },
+    );
+  }
+}
+
+/// Prefers song cover; falls back to Deezer artist photo by name.
+class _NotifCover extends StatefulWidget {
+  final String cover;
+  final String artist;
+  final Widget fallback;
+  const _NotifCover({
+    required this.cover,
+    required this.artist,
+    required this.fallback,
+  });
+
+  @override
+  State<_NotifCover> createState() => _NotifCoverState();
+}
+
+class _NotifCoverState extends State<_NotifCover> {
+  String? _deezer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.cover.startsWith('http') && widget.artist.isNotEmpty) {
+      ArtistImageService.imageFor(widget.artist).then((url) {
+        if (mounted && url != null) setState(() => _deezer = url);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final url = widget.cover.startsWith('http')
+        ? widget.cover
+        : (_deezer ?? '');
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: url.startsWith('http')
+          ? Image.network(
+              url,
+              width: 52,
+              height: 52,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => widget.fallback,
+            )
+          : widget.fallback,
     );
   }
 }
