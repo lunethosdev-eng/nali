@@ -21,32 +21,42 @@ class FollowService {
     final uid = SupabaseService.currentUser?.id;
     if (uid == null) return false;
     final name = artistName.trim();
-    final following = await isFollowing(name);
-    if (following) {
-      await SupabaseService.kokoro
-          .from('artist_follows')
-          .delete()
-          .eq('user_id', uid)
-          .eq('artist_name', name);
+    try {
+      final following = await isFollowing(name);
+      if (following) {
+        await SupabaseService.kokoro
+            .from('artist_follows')
+            .delete()
+            .eq('user_id', uid)
+            .eq('artist_name', name);
+        return false;
+      } else {
+        await SupabaseService.kokoro.from('artist_follows').upsert({
+          'user_id': uid,
+          'artist_name': name,
+          'artist_image': imageUrl,
+        });
+        return true;
+      }
+    } catch (_) {
       return false;
-    } else {
-      await SupabaseService.kokoro.from('artist_follows').upsert({
-        'user_id': uid,
-        'artist_name': name,
-        'artist_image': imageUrl,
-      });
-      return true;
     }
   }
 
   static Future<List<Map<String, dynamic>>> list() async {
     final uid = SupabaseService.currentUser?.id;
     if (uid == null) return [];
-    final res = await SupabaseService.kokoro
-        .from('artist_follows')
-        .select()
-        .eq('user_id', uid)
-        .order('created_at', ascending: false);
-    return List<Map<String, dynamic>>.from(res);
+    try {
+      final res = await SupabaseService.kokoro
+          .from('artist_follows')
+          .select()
+          .eq('user_id', uid)
+          .order('created_at', ascending: false);
+      return List<Map<String, dynamic>>.from(res);
+    } catch (_) {
+      // Table may not exist yet (PGRST205). Fail soft so player / home never
+      // surface a raw PostgrestException banner.
+      return [];
+    }
   }
 }
