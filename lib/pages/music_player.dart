@@ -29,8 +29,8 @@ class MusicPlayer extends StatefulWidget {
     return PageRouteBuilder<void>(
       opaque: false,
       barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 380),
-      reverseTransitionDuration: const Duration(milliseconds: 320),
+      transitionDuration: const Duration(milliseconds: 420),
+      reverseTransitionDuration: const Duration(milliseconds: 360),
       pageBuilder: (context, animation, secondary) => MusicPlayer(),
       transitionsBuilder: (context, animation, secondary, child) {
         final curved = CurvedAnimation(
@@ -38,18 +38,33 @@ class MusicPlayer extends StatefulWidget {
           curve: Curves.easeOutCubic,
           reverseCurve: Curves.easeInCubic,
         );
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(curved),
-          child: FadeTransition(
-            opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
-              CurvedAnimation(
-                  parent: animation, curve: const Interval(0.0, 0.65)),
-            ),
-            child: child,
-          ),
+        // Keep rounded top corners while dismissing so it never becomes a
+        // hard rectangle mid-close.
+        final radius = Tween<double>(begin: 28, end: 0).animate(curved);
+        return AnimatedBuilder(
+          animation: curved,
+          builder: (context, _) {
+            return SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 1),
+                end: Offset.zero,
+              ).animate(curved),
+              child: FadeTransition(
+                opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: const Interval(0.0, 0.7),
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(radius.value),
+                  ),
+                  child: child,
+                ),
+              ),
+            );
+          },
         );
       },
       settings: RouteSettings(name: '/player', arguments: song),
