@@ -711,16 +711,70 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
       onLongPressStart: (_) => _openCoverExpand(cover),
       child: Center(
         child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxW, maxHeight: maxW),
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: Hero(
-              tag: 'player_cover_${cover ?? 'none'}',
-              child: Material(
-                color: Colors.transparent,
-                child: framed,
+          constraints: BoxConstraints(maxWidth: maxW + 40, maxHeight: maxW + 40),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Soft mesh-style glow behind artwork (BitChord-inspired)
+              IgnorePointer(
+                child: Container(
+                  width: maxW + 36,
+                  height: maxW + 36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xfffc3c44).withOpacity(0.22),
+                        const Color(0xFF7B5CFF).withOpacity(0.12),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.45, 1.0],
+                    ),
+                  ),
+                ),
               ),
-            ),
+              IgnorePointer(
+                child: Container(
+                  width: maxW * 0.85,
+                  height: maxW * 0.85,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      center: const Alignment(-0.4, -0.35),
+                      colors: [
+                        Colors.white.withOpacity(0.12),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxW, maxHeight: maxW),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Hero(
+                    tag: 'player_cover_${cover ?? 'none'}',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(radius),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.45),
+                              blurRadius: 28,
+                              offset: const Offset(0, 16),
+                            ),
+                          ],
+                        ),
+                        child: framed,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
