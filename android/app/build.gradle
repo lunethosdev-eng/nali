@@ -14,7 +14,7 @@ def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '
 
 android {
     namespace "com.pokke.music"
-    compileSdk 36
+    compileSdk 37
     ndkVersion flutter.ndkVersion
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }
@@ -24,7 +24,7 @@ android {
         applicationId "com.pokke.app"
         manifestPlaceholders += [appAuthRedirectScheme: "pokke"]
         minSdk 26
-        targetSdk 36
+        targetSdk 36 // runtime target can stay 36; compileSdk 37 satisfies innertubex AAR
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
         multiDexEnabled true
