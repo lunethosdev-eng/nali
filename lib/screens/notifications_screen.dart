@@ -34,6 +34,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (mounted) setState(() => _refreshing = false);
   }
 
+  Widget _fallbackCover(Map<String, dynamic> n) {
+    final isChat = n['type'] == 'chat';
+    return Container(
+      width: 52,
+      height: 52,
+      color: const Color(0xFF1A1A1E),
+      child: Icon(
+        isChat ? Icons.chat_bubble_outline_rounded : Icons.album_outlined,
+        color: const Color(0xfffc3c44).withOpacity(0.85),
+        size: 24,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -46,12 +60,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             backgroundColor: Colors.transparent,
             title: Text(t('Notificaciones', 'Notifications')),
             actions: [
-              if (items.isNotEmpty)
+              if (items.isNotEmpty) ...[
                 TextButton(
                   onPressed: () => NotificationService.instance.markAllRead(),
                   child: Text(t('Leer todo', 'Read all'),
                       style: const TextStyle(color: Colors.white70)),
                 ),
+                TextButton(
+                  onPressed: () async {
+                    await NotificationService.instance.clear();
+                    if (mounted) setState(() {});
+                  },
+                  child: Text(t('Borrar todo', 'Clear all'),
+                      style: const TextStyle(color: Color(0xfffc3c44))),
+                ),
+              ],
               IconButton(
                 onPressed: _refreshing ? null : _refresh,
                 icon: _refreshing
@@ -90,49 +113,83 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       final n = items[i];
                       final read = n['read'] == true;
                       final song = n['song'];
+                      final cover = song is Map
+                          ? (song['cover_url'] ??
+                                  song['artwork_url'] ??
+                                  song['thumbnail_url'] ??
+                                  '')
+                              .toString()
+                          : '';
                       return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.only(bottom: 10),
                         child: LiquidGlass(
-                          blur: 16,
-                          opacity: read ? 0.06 : 0.12,
-                          borderRadius: BorderRadius.circular(14),
+                          blur: 18,
+                          opacity: read ? 0.05 : 0.14,
+                          borderRadius: BorderRadius.circular(16),
                           child: ListTile(
-                            leading: Icon(
-                              n['type'] == 'new_release'
-                                  ? Icons.album_outlined
-                                  : Icons.notifications_outlined,
-                              color: read
-                                  ? Colors.white38
-                                  : const Color(0xfffc3c44),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            leading: ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: cover.startsWith('http')
+                                  ? Image.network(
+                                      cover,
+                                      width: 52,
+                                      height: 52,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) =>
+                                          _fallbackCover(n),
+                                    )
+                                  : _fallbackCover(n),
                             ),
                             title: Text(
                               n['title'] ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 color: Colors.white,
                                 fontWeight:
                                     read ? FontWeight.w500 : FontWeight.w700,
+                                fontSize: 15,
                               ),
                             ),
                             subtitle: Text(
                               n['body'] ?? '',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                  color: Colors.white.withOpacity(0.55)),
+                                color: Colors.white.withOpacity(0.55),
+                                height: 1.25,
+                              ),
                             ),
-                            trailing: read
-                                ? null
-                                : Container(
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (!read)
+                                  Container(
                                     width: 8,
                                     height: 8,
+                                    margin: const EdgeInsets.only(bottom: 6),
                                     decoration: const BoxDecoration(
                                       color: Color(0xfffc3c44),
                                       shape: BoxShape.circle,
                                     ),
                                   ),
+                                Icon(
+                                  n['type'] == 'chat'
+                                      ? Icons.chat_bubble_outline_rounded
+                                      : Icons.album_outlined,
+                                  size: 16,
+                                  color: Colors.white38,
+                                ),
+                              ],
+                            ),
                             onTap: () async {
                               await NotificationService.instance
                                   .markRead(n['id']?.toString() ?? '');
                               if (song is Map<String, dynamic>) {
-                                await PlayerController.instance.playSong(song);
+                                await PlayerController.instance
+                                    .playSong(Map<String, dynamic>.from(song));
                               }
                             },
                           ),
