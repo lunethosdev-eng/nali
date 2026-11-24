@@ -212,6 +212,14 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> clear() async {
+    // Permanently mark every song id as seen so refreshFromFollows never
+    // re-inserts the same releases after the user cleared the list.
+    final seenIds = <String>{};
+    for (final e in items) {
+      final sid = e['song_id']?.toString();
+      if (sid != null && sid.isNotEmpty) seenIds.add(sid);
+    }
+    if (seenIds.isNotEmpty) await _markSeen(seenIds);
     items = [];
     await _save();
   }
