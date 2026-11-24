@@ -38,9 +38,10 @@ class MusicPlayer extends StatefulWidget {
           curve: Curves.easeOutCubic,
           reverseCurve: Curves.easeInCubic,
         );
-        // Keep rounded top corners while dismissing so it never becomes a
-        // hard rectangle mid-close.
-        final radius = Tween<double>(begin: 28, end: 0).animate(curved);
+        // Never collapse to a hard rectangle: keep top radius ≥ 18 while
+        // opening/closing (BitChord-like sheet dismiss).
+        final radius = Tween<double>(begin: 28, end: 18).animate(curved);
+        final scale = Tween<double>(begin: 0.94, end: 1.0).animate(curved);
         return AnimatedBuilder(
           animation: curved,
           builder: (context, _) {
@@ -53,14 +54,18 @@ class MusicPlayer extends StatefulWidget {
                 opacity: Tween<double>(begin: 0.0, end: 1.0).animate(
                   CurvedAnimation(
                     parent: animation,
-                    curve: const Interval(0.0, 0.7),
+                    curve: const Interval(0.0, 0.75),
                   ),
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(radius.value),
+                child: Transform.scale(
+                  scale: scale.value,
+                  alignment: Alignment.bottomCenter,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(radius.value),
+                    ),
+                    child: child,
                   ),
-                  child: child,
                 ),
               ),
             );
@@ -152,11 +157,11 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
     super.initState();
     _lyricsAnim = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: const Duration(milliseconds: 480),
     );
     _playBounce = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 280),
+      duration: const Duration(milliseconds: 260),
     );
     _loadQueue();
     HeadphoneService.instance.start();
@@ -1174,7 +1179,8 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
           return AnimatedBuilder(
             animation: _lyricsAnim,
             builder: (context, _) {
-              final tAnim = Curves.easeOutCubic.transform(_lyricsAnim.value);
+              final tAnim = const Cubic(0.22, 1.0, 0.36, 1.0)
+                  .transform(_lyricsAnim.value);
               return Scaffold(
                 backgroundColor: Colors.transparent,
                 body: Stack(
@@ -1184,9 +1190,9 @@ class _MusicPlayerState extends State<MusicPlayer> with TickerProviderStateMixin
                     Opacity(
                       opacity: tAnim,
                       child: Transform.translate(
-                        offset: Offset(0, 28 * (1 - tAnim)),
+                        offset: Offset(0, 36 * (1 - tAnim)),
                         child: Transform.scale(
-                          scale: 0.96 + 0.04 * tAnim,
+                          scale: 0.94 + 0.06 * tAnim,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
