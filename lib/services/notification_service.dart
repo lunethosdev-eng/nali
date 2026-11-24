@@ -243,4 +243,25 @@ class NotificationService extends ChangeNotifier {
     _save();
     if (playSound) _playNotifSound();
   }
+
+  /// Chat / listen-together style notification (shows chat icon in the list).
+  void pushChat({
+    required String fromName,
+    required String message,
+    String? avatarUrl,
+    String? roomId,
+  }) {
+    pushLocal(
+      title: fromName,
+      body: message,
+      type: 'chat',
+      extra: {
+        if (avatarUrl != null) 'cover_url': avatarUrl,
+        if (roomId != null) 'room_id': roomId,
+        'song': {
+          if (avatarUrl != null) 'cover_url': avatarUrl,
+        },
+      },
+    );
+  }
 }
