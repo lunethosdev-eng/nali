@@ -14,6 +14,7 @@ import 'package:nali/services/provider_service.dart';
 import 'package:nali/services/custom_provider_service.dart';
 import 'package:nali/services/native_player_bridge.dart';
 import 'package:nali/services/artist_image_service.dart';
+import 'package:nali/services/tops_service.dart';
 
 class HomePage extends StatefulWidget {
   HomePage({super.key});
@@ -32,6 +33,7 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _recent = [];
   List<Map<String, dynamic>> _popular = [];
   List<Map<String, dynamic>> _followedArtists = [];
+  List<Map<String, dynamic>> _tops = [];
   bool _loading = true;
   String? _loadError;
 
@@ -130,6 +132,11 @@ class _HomePageState extends State<HomePage> {
       return rows.where((song) => (counts[(song['id'] ?? '').toString()] ?? 0) > 0).toList();
     }
 
+    List<Map<String, dynamic>> tops = [];
+    try {
+      tops = await TopsService.instance.topSongs(limit: 24);
+    } catch (_) {}
+
     if (!mounted) return;
     setState(() {
       _catalog = all;
@@ -138,6 +145,7 @@ class _HomePageState extends State<HomePage> {
       _recent = history;
       _popular = sortByCount(dailyCounts).take(30).toList();
       _followedArtists = followed;
+      _tops = tops;
     });
   }
 
@@ -345,6 +353,11 @@ class _HomePageState extends State<HomePage> {
                         if (_catalog.isEmpty && _discover.isEmpty && _forYou.isEmpty && _recent.isEmpty && _trending.isEmpty)
                           _homeEmptyState(),
                         // Followed artists only
+                        if (_tops.isNotEmpty) ...[
+                          _sectionTitle(t('Tops globales', 'Global tops')),
+                          _hList(_tops),
+                          const SizedBox(height: 22),
+                        ],
                         _sectionTitle(t('Artistas que sigues', 'Artists you follow')),
                         if (_followedArtists.isEmpty)
                           Padding(
