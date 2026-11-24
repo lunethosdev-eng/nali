@@ -401,31 +401,48 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
                               onLongPressMoveUpdate: (d) =>
                                   _onLongPressMove(d, constraints),
                               onLongPressEnd: _onLongPressEnd,
-                              child: LiquidGlass(
-                                blur: 34,
-                                opacity: 0.14,
-                                borderRadius:
-                                    BorderRadius.circular(28 - 2 * t),
-                                borderWidth: 0.85,
-                                enableSpecular: true,
-                                elevation: 10,
-                                child: SizedBox(
-                                  height: barH,
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceEvenly,
-                                    children: _navCollapsed
-                                        ? [
-                                            for (final i in _collapsedMain)
-                                              _navItem(i,
-                                                  compact: true,
+                              child: Transform(
+                                alignment: Alignment.center,
+                                transform: () {
+                                  // Liquid stretch while dragging across the nav.
+                                  final stretchX = _isDragging
+                                      ? (1.0 +
+                                          (_velocity.abs() / 90.0)
+                                              .clamp(0.0, 0.08))
+                                      : 1.0;
+                                  final skew = _isDragging
+                                      ? (_velocity / 220.0).clamp(-0.12, 0.12)
+                                      : 0.0;
+                                  return Matrix4.identity()
+                                    ..setEntry(0, 0, stretchX)
+                                    ..setEntry(0, 1, skew);
+                                }(),
+                                child: LiquidGlass(
+                                  blur: 34,
+                                  opacity: 0.14,
+                                  borderRadius:
+                                      BorderRadius.circular(28 - 2 * t),
+                                  borderWidth: 0.85,
+                                  enableSpecular: true,
+                                  elevation: 10,
+                                  child: SizedBox(
+                                    height: barH,
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceEvenly,
+                                      children: _navCollapsed
+                                          ? [
+                                              for (final i in _collapsedMain)
+                                                _navItem(i,
+                                                    compact: true,
+                                                    showLabel: showLabels),
+                                            ]
+                                          : List.generate(
+                                              5,
+                                              (i) => _navItem(i,
                                                   showLabel: showLabels),
-                                          ]
-                                        : List.generate(
-                                            5,
-                                            (i) => _navItem(i,
-                                                showLabel: showLabels),
-                                          ),
+                                            ),
+                                    ),
                                   ),
                                 ),
                               ),
