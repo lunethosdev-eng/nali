@@ -93,8 +93,12 @@ class PlayerController extends ChangeNotifier {
     });
     p.onDurationChanged.listen((d) {
       if (_usingB == isB) {
-        duration = d;
-        notifyListeners();
+        // Prefer a real positive duration from the player, but never overwrite
+        // a known good metadata duration with zero (common with googlevideo).
+        if (d.inMilliseconds > 0 || duration.inMilliseconds <= 0) {
+          duration = d;
+          notifyListeners();
+        }
       }
     });
   }
@@ -399,7 +403,16 @@ class PlayerController extends ChangeNotifier {
     currentSong = selectedSong;
     isPlaying = false;
     position = Duration.zero;
-    duration = Duration.zero;
+    // Prefer known metadata duration immediately so the UI never stays at 0:00
+    // while the stream resolves or while audioplayers is slow to report duration.
+    final metaSecs = selectedSong['duration_seconds'] is num
+        ? (selectedSong['duration_seconds'] as num).round()
+        : (selectedSong['duration'] is num
+            ? (selectedSong['duration'] as num).round()
+            : null);
+    duration = (metaSecs != null && metaSecs > 0)
+        ? Duration(seconds: metaSecs)
+        : Duration.zero;
     _nextReady = false;
     _preloadedIndex = -1;
     notifyListeners();
@@ -409,11 +422,20 @@ class PlayerController extends ChangeNotifier {
     }
 
     try {
+      // Force both players silent and stopped before any resolve or new source.
+      // On web, a single stop() is sometimes ignored while a previous UrlSource
+      // is still buffering; mute + stop on both makes the switch reliable.
       await _serializeAudio(() async {
-        await _playerA.stop();
-        await _playerB.stop();
-        await _playerA.setVolume(1);
-        await _playerB.setVolume(1);
+        try {
+          await _playerA.setVolume(0);
+          await _playerB.setVolume(0);
+          await _playerA.stop();
+          await _playerB.stop();
+          await _playerA.setVolume(1);
+          await _playerB.setVolume(1);
+        } catch (e) {
+          debugPrint('player stop/reset: $e');
+        }
       });
       if (requestToken != _playRequestToken) return;
 
@@ -432,11 +454,17 @@ class PlayerController extends ChangeNotifier {
         selectedSong['youtube_id'] = videoId;
         selectedSong['audio_url'] = url;
         selectedSong['stream_url'] = url;
-        if (resolved.durationSeconds != null) {
+        if (resolved.durationSeconds != null && resolved.durationSeconds! > 0) {
           selectedSong['duration_seconds'] = resolved.durationSeconds;
+          duration = Duration(seconds: resolved.durationSeconds!);
+          notifyListeners();
         }
         if (resolved.mimeType != null) selectedSong['mime_type'] = resolved.mimeType;
         selectedSong['cover_url'] ??= 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg';
+        // Keep currentSong in sync so UI (cover, title, duration) updates
+        // immediately even if the stream takes another moment to start.
+        currentSong = Map<String, dynamic>.from(selectedSong);
+        notifyListeners();
       }
       if (requestToken != _playRequestToken) return;
 
@@ -472,12 +500,24 @@ class PlayerController extends ChangeNotifier {
           await _active.play(UrlSource(url));
         }
         if (requestToken != _playRequestToken) {
-          await _active.stop();
+          try {
+            await _active.stop();
+          } catch (_) {}
           return;
         }
         isPlaying = true;
         _pausedForDj = false;
         _nextReady = false;
+
+        // Ensure duration is never left at zero when we already know it from
+        // catalog or InnerTube. audioplayers sometimes never fires
+        // onDurationChanged for googlevideo / adaptive streams.
+        final knownSecs = selectedSong['duration_seconds'] is num
+            ? (selectedSong['duration_seconds'] as num).round()
+            : null;
+        if (knownSecs != null && knownSecs > 0 && duration.inSeconds < 1) {
+          duration = Duration(seconds: knownSecs);
+        }
 
         if (queue.isEmpty) {
           queue = [selectedSong];
@@ -496,12 +536,24 @@ class PlayerController extends ChangeNotifier {
           final idx = queue.indexWhere((s) => _songKey(s) == key);
           if (idx >= 0) queueIndex = idx;
         }
+        currentSong = Map<String, dynamic>.from(selectedSong);
         notifyListeners();
       });
 
       if (requestToken != _playRequestToken || !isPlaying) return;
       unawaited(_recordPlay(selectedSong));
       unawaited(_persistSession());
+      // Fallback: if the player still reports 0 duration after a short settle,
+      // force the known metadata value so the seek bar and time labels work.
+      unawaited(Future.delayed(const Duration(milliseconds: 1200), () {
+        if (requestToken != _playRequestToken) return;
+        final known = currentSong?['duration_seconds'];
+        final secs = known is num ? known.round() : null;
+        if (secs != null && secs > 0 && duration.inSeconds < 1) {
+          duration = Duration(seconds: secs);
+          notifyListeners();
+        }
+      }));
       unawaited(Future.delayed(const Duration(milliseconds: 400), () {
         if (requestToken == _playRequestToken) _preloadNext();
       }));
@@ -509,13 +561,25 @@ class PlayerController extends ChangeNotifier {
       debugPrint('playSong error: $error');
       if (requestToken == _playRequestToken) {
         await _serializeAudio(() async {
-          await _playerA.stop();
-          await _playerB.stop();
+          try {
+            await _playerA.setVolume(0);
+            await _playerB.setVolume(0);
+            await _playerA.stop();
+            await _playerB.stop();
+            await _playerA.setVolume(1);
+            await _playerB.setVolume(1);
+          } catch (_) {}
         });
         currentSong = selectedSong;
         isPlaying = false;
         position = Duration.zero;
-        duration = Duration.zero;
+        // Keep the known duration so the UI still shows the correct length
+        // even when the stream itself failed to start.
+        final known = selectedSong['duration_seconds'];
+        final secs = known is num ? known.round() : null;
+        duration = (secs != null && secs > 0)
+            ? Duration(seconds: secs)
+            : Duration.zero;
         notifyListeners();
       }
     }
