@@ -14,6 +14,23 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
+// Force compileSdk ≥ 36 on Android library plugins (file_picker was on 34).
+subprojects { sub ->
+    sub.afterEvaluate {
+        if (sub.plugins.hasPlugin("com.android.library") ||
+            sub.plugins.hasPlugin("com.android.application")) {
+            def android = sub.extensions.findByName("android")
+            if (android != null) {
+                try {
+                    android.compileSdkVersion = 36
+                } catch (Throwable ignored) {
+                    try { android.compileSdk = 36 } catch (Throwable ignored2) {}
+                }
+            }
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
