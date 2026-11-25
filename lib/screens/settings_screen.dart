@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/dj_service.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/native_preferences_bridge.dart';
 import 'package:nali/services/notification_service.dart';
@@ -468,6 +469,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
 
+              ],
+              if (widget.category == 'dj') ...[
+                _section(t('DJ / MAI Radio', 'DJ / MAI Radio')),
+                const _DjSettingsPanel(),
+                ListTile(
+                  leading: const Icon(Icons.radio_rounded, color: Color(0xff5CE1C5)),
+                  title: Text(t('Abrir MAI Radio', 'Open MAI Radio'), style: const TextStyle(color: Colors.white)),
+                  subtitle: Text(t('Pantalla dedicada con blob y voz', 'Dedicated blob + voice screen'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  onTap: () => Navigator.of(context).pushNamed('/dj'),
+                ),
+                _incompleteNote(t(
+                  'Coloca los MP3 en assets/dj/nugget_dj/ (welcome, pause, skip, …) y haz rebuild. Más DJs = más carpetas bajo assets/dj/.',
+                  'Put MP3s in assets/dj/nugget_dj/ (welcome, pause, skip, …) and rebuild. More DJs = more folders under assets/dj/.',
+                )),
               ],
               if (widget.category == 'canvas') ...[
                 _section(t('Canvas y portadas animadas', 'Canvas and animated covers')),
@@ -955,7 +970,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'privacy' => t('Privacidad', 'Privacy'), 'personalization' => t('Personalización', 'Personalization'),
     'playback' => t('Reproducción', 'Playback'), 'lyrics' => t('Letras', 'Lyrics'),
     'library' => t('Biblioteca', 'Library'), 'notifications' => t('Notificaciones', 'Notifications'),
-    'social' => t('Social', 'Social'), 'canvas' => t('Canvas', 'Canvas'), 'advanced' => t('Ajustes avanzados', 'Advanced settings'),
+    'social' => t('Social', 'Social'), 'dj' => t('DJ / MAI Radio', 'DJ / MAI Radio'), 'canvas' => t('Canvas', 'Canvas'), 'advanced' => t('Ajustes avanzados', 'Advanced settings'),
     _ => t('Ajustes', 'Settings'),
   };
 
@@ -970,6 +985,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ('library', Icons.library_music_outlined, t('Caché, importación y playlists', 'Cache, imports and playlists'), const Color(0xffa7c77a)),
       ('notifications', Icons.notifications_none_rounded, t('Sonidos y alertas', 'Sounds and alerts'), const Color(0xffffca70)),
       ('social', Icons.people_outline_rounded, t('Escucha compartida y comunidad', 'Shared listening and community'), const Color(0xff7fc4c9)),
+      ('dj', Icons.podcasts_rounded, t('MAI Radio / DJ de voz', 'MAI Radio / voice DJ'), const Color(0xff5CE1C5)),
       ('canvas', Icons.movie_outlined, t('Apple Music, Spotify y portadas animadas', 'Apple Music, Spotify and animated covers'), const Color(0xffb0a0ff)),
       ('advanced', Icons.tune_rounded, t('Funciones beta y herramientas', 'Beta features and tools'), const Color(0xffb0a0ff)),
     ];
@@ -1261,6 +1277,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
             fontWeight: FontWeight.w700,
             letterSpacing: 0.6,
           )),
+    );
+  }
+}
+
+
+class _DjSettingsPanel extends StatefulWidget {
+  const _DjSettingsPanel();
+  @override
+  State<_DjSettingsPanel> createState() => _DjSettingsPanelState();
+}
+
+class _DjSettingsPanelState extends State<_DjSettingsPanel> {
+  bool _ready = false;
+  bool _enabled = false;
+  String _active = 'nugget_dj';
+  List<String> _djs = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final d = DjService.instance;
+    await d.init();
+    if (!mounted) return;
+    setState(() {
+      _enabled = d.enabled;
+      _active = d.activeId;
+      _djs = d.availableDjs;
+      _ready = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator(color: Color(0xff5CE1C5))),
+      );
+    }
+    return Column(
+      children: [
+        SwitchListTile(
+          title: const Text('Activar DJ de voz', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Clips al pausar, saltar, shuffle…',
+              style: TextStyle(color: Colors.white54, fontSize: 12)),
+          value: _enabled,
+          activeColor: const Color(0xff5CE1C5),
+          onChanged: (v) async {
+            await DjService.instance.setEnabled(v);
+            setState(() => _enabled = v);
+          },
+        ),
+        if (_djs.isNotEmpty)
+          ..._djs.map((id) => RadioListTile<String>(
+                value: id,
+                groupValue: _active,
+                activeColor: const Color(0xff5CE1C5),
+                title: Text(id.replaceAll('_', ' '),
+                    style: const TextStyle(color: Colors.white)),
+                onChanged: (v) async {
+                  if (v == null) return;
+                  await DjService.instance.setActiveDj(v);
+                  setState(() => _active = v);
+                },
+              )),
+      ],
     );
   }
 }
