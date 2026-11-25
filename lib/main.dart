@@ -30,6 +30,7 @@ import 'package:nali/pages/home_page.dart';
 import 'package:nali/pages/music_list.dart';
 import 'package:nali/pages/music_player.dart';
 import 'package:nali/pages/radio.dart';
+import 'package:nali/pages/dj_player_page.dart';
 import 'package:nali/pages/search_page.dart';
 import 'package:nali/pages/library_page.dart';
 import 'package:nali/screens/profile_edit_screen.dart' show ProfileEditScreen;
@@ -274,6 +275,7 @@ class _NaliAppState extends State<NaliApp> {
         '/firstpage': (context) => FirstPage(),
         '/browse': (context) => BrowsePage(),
         '/radio': (context) => RadioPage(),
+        '/dj': (context) => const DjPlayerPage(),
         '/library': (context) => LibraryPage(),
         '/search': (context) => SearchPage(),
         '/home': (context) => HomePage(),
