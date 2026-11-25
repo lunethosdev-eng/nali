@@ -34,6 +34,10 @@ class _MixEditorScreenState extends State<MixEditorScreen> {
   // Horizontal offset of track blocks (visual only + cut)
   double _offsetA = 0; // 0..1 of timeline
   double _offsetB = 0.25;
+  String _stemModeA = 'full';
+  String _stemModeB = 'full';
+  double _muteFrom = 0;
+  double _muteTo = 30;
 
   String t(String es, String en) =>
       SettingsService.instance.locale == 'en' ? en : es;
@@ -255,6 +259,10 @@ class _MixEditorScreenState extends State<MixEditorScreen> {
         'source': 'mix',
         'mix_cut_sec': _cutSec,
         'mix_xfade_sec': _xfadeSec,
+        'stem_mode_a': _stemModeA,
+        'stem_mode_b': _stemModeB,
+        'mute_from_sec': _muteFrom,
+        'mute_to_sec': _muteTo,
       }).select().single();
       final pid = row['id'];
       await SupabaseService.kokoro.from('playlist_songs').insert({
@@ -614,7 +622,64 @@ class _MixEditorScreenState extends State<MixEditorScreen> {
             ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          Text(
+            t('Voces / instrumental', 'Vocals / instrumental'),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            t(
+              'Modo de stems para cada pista. La separación real de voz requiere stems o un servicio ML; aquí se guarda la intención y se aplica volumen/mute por tramo.',
+              'Stem mode per track. Real vocal isolation needs stems or an ML service; here we store intent and apply volume/mute ranges.',
+            ),
+            style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          _stemChips(
+            label: 'A',
+            value: _stemModeA,
+            onChanged: (v) => setState(() => _stemModeA = v),
+          ),
+          const SizedBox(height: 8),
+          _stemChips(
+            label: 'B',
+            value: _stemModeB,
+            onChanged: (v) => setState(() => _stemModeB = v),
+          ),
+          if (_stemModeA == 'mute_range' || _stemModeB == 'mute_range') ...[
+            const SizedBox(height: 8),
+            Text(
+              t('Rango mute voz (segundos)', 'Vocal mute range (seconds)'),
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Slider(
+                    min: 0,
+                    max: math.max(_durA.inSeconds.toDouble(), 30),
+                    value: _muteFrom.clamp(
+                        0, math.max(_durA.inSeconds.toDouble(), 30)),
+                    label: _muteFrom.toStringAsFixed(0),
+                    onChanged: (v) => setState(() => _muteFrom = v),
+                  ),
+                ),
+                Expanded(
+                  child: Slider(
+                    min: 0,
+                    max: math.max(_durA.inSeconds.toDouble(), 30),
+                    value: _muteTo.clamp(
+                        0, math.max(_durA.inSeconds.toDouble(), 30)),
+                    label: _muteTo.toStringAsFixed(0),
+                    onChanged: (v) => setState(() => _muteTo = v),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 16),
           SizedBox(
             height: 50,
             child: ElevatedButton.icon(
@@ -632,6 +697,44 @@ class _MixEditorScreenState extends State<MixEditorScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _stemChips({
+    required String label,
+    required String value,
+    required ValueChanged<String> onChanged,
+  }) {
+    final options = <(String, String)>[
+      ('full', t('Completo', 'Full')),
+      ('mute_vocals', t('Sin voz', 'No vocals')),
+      ('vocals_only', t('Solo voz', 'Vocals only')),
+      ('mute_range', t('Mute voz en rango', 'Mute vocals in range')),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Pista $label',
+            style: const TextStyle(color: Colors.white60, fontSize: 12)),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final o in options)
+              ChoiceChip(
+                label: Text(o.$2, style: const TextStyle(fontSize: 12)),
+                selected: value == o.$1,
+                selectedColor: const Color(0xfffc3c44),
+                labelStyle: TextStyle(
+                  color: value == o.$1 ? Colors.white : Colors.white70,
+                ),
+                backgroundColor: Colors.white10,
+                onSelected: (_) => onChanged(o.$1),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
