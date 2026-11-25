@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:nali/services/dj_service.dart';
 import 'package:nali/services/audio_cache_service.dart';
 import 'package:nali/services/listening_history.dart';
 import 'package:nali/services/settings_service.dart';
@@ -250,6 +251,8 @@ class PlayerController extends ChangeNotifier {
       return;
     }
     shuffleMode = !shuffleMode;
+    // ignore: unawaited_futures
+    DjService.instance.onShuffle();
     if (shuffleMode) {
       _originalQueue = List<Map<String, dynamic>>.from(queue);
       final cur = currentSong;
@@ -344,6 +347,8 @@ class PlayerController extends ChangeNotifier {
   Future<void> playNextInQueue() async {
     if (_usesNativePlayer) { await NativePlayerBridge.instance.invoke('next'); return; }
     if (queue.isEmpty) return;
+    // ignore: unawaited_futures
+    DjService.instance.onSkip();
     await _advanceToNext();
   }
 
@@ -701,6 +706,9 @@ class PlayerController extends ChangeNotifier {
     await _active.pause();
     isPlaying = false;
     notifyListeners();
+    // Fire-and-forget DJ voice clip
+    // ignore: unawaited_futures
+    DjService.instance.onPause();
   }
 
   Future<void> resume() async {
