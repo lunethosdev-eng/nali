@@ -58,6 +58,17 @@ flutter:
     - assets/logo/
     - assets/fonts/
     - assets/Sounds/
+    - assets/dj/
+    - assets/dj/nugget_dj/
+    - assets/dj/nugget_dj/welcome/
+    - assets/dj/nugget_dj/pause/
+    - assets/dj/nugget_dj/skip/
+    - assets/dj/nugget_dj/shuffle/
+    - assets/dj/nugget_dj/playlist_end/
+    - assets/dj/nugget_dj/low_battery/
+    - assets/dj/nugget_dj/building_playlist/
+    - assets/dj/nugget_dj/favorites/
+    - assets/dj/nugget_dj/transitions/
 
 dependency_overrides:
   # Pin the JNI-based Android implementation to avoid the obsolete Registrar API.
