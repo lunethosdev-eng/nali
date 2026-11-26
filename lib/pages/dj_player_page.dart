@@ -35,7 +35,7 @@ class _DjPlayerPageState extends State<DjPlayerPage>
   String? _lyrics;
   double _balance = 0.5;
   bool _genreFocus = false;
-  Color _blobColor = const Color(0xFF5CE1C5);
+  Color _blobColor = const Color(0xfffc3c44);
 
   String t(String es, String en) =>
       SettingsService.instance.locale == 'en' ? en : es;
@@ -273,11 +273,11 @@ class _DjPlayerPageState extends State<DjPlayerPage>
         final song = pc.currentSong;
         final hasTrack = song != null;
         final title = _voicePhase
-            ? t('MAI al habla…', 'MAI speaking…')
-            : (song?['title'] ?? t('MAI al habla…', 'MAI speaking…')).toString();
+            ? (SettingsService.instance.locale == 'en' ? (DjService.instance.displayName + ' speaking…') : (DjService.instance.displayName + ' al habla…'))
+            : (song?['title'] ?? (SettingsService.instance.locale == 'en' ? (DjService.instance.displayName + ' speaking…') : (DjService.instance.displayName + ' al habla…'))).toString();
         final artist = _voicePhase
-            ? 'MAI Radio'
-            : (song?['artist'] ?? 'MAI Radio').toString();
+            ? DjService.instance.displayName
+            : (song?['artist'] ?? DjService.instance.displayName).toString();
         final cover =
             (song?['cover_url'] ?? song?['animated_cover_url'])?.toString();
         final pos = pc.position;
@@ -354,7 +354,7 @@ class _DjPlayerPageState extends State<DjPlayerPage>
                           ),
                           const Spacer(),
                           Text(
-                            'MAI RADIO',
+                            DjService.instance.displayName.toUpperCase(),
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.45),
                               fontSize: 11,
@@ -737,16 +737,14 @@ class _DjPlayerPageState extends State<DjPlayerPage>
                             style: const TextStyle(color: Colors.white54),
                           ),
                         )
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            _lyrics!,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              height: 1.7,
-                            ),
-                          ),
+                      : ListenableBuilder(
+                          listenable: PlayerController.instance,
+                          builder: (_, __) {
+                            return KaraokeLyrics(
+                              lrcText: _lyrics,
+                              position: PlayerController.instance.position,
+                            );
+                          },
                         ),
             ),
           ],
@@ -758,7 +756,7 @@ class _DjPlayerPageState extends State<DjPlayerPage>
   Widget _settingsSheet() {
     final weights = DjService.instance.blockWeights;
     final colors = <int>[
-      0xFF5CE1C5,
+      0xfffc3c44,
       0xFF7C5CFF,
       0xFFFC3C44,
       0xFFFFB347,
@@ -796,7 +794,7 @@ class _DjPlayerPageState extends State<DjPlayerPage>
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  t('Configuración MAI Radio', 'MAI Radio settings'),
+                  t('Configuración', 'Settings'),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: Colors.white,
