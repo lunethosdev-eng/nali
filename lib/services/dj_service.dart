@@ -52,11 +52,34 @@ class DjService {
   String get placement => _placement;
   int get blobColor => _blobColor;
   double get voiceXfade => _voiceXfade;
+
+  /// User-facing radio name based on active voice pack (not "MAI").
+  String get displayName {
+    final id = _activeId.replaceAll('_', ' ').trim();
+    if (id.isEmpty) return 'Radio';
+    // "nugget dj" → "Nugget Radio"
+    final parts = id.split(' ');
+    final brand = parts.first;
+    final brandCap = brand.isEmpty
+        ? 'Radio'
+        : brand[0].toUpperCase() + brand.substring(1);
+    return '$brandCap Radio';
+  }
+
+  /// Accent for the active pack (app palette leans red/black/white).
+  int get accentColor {
+    switch (_activeId) {
+      case 'nugget_dj':
+        return 0xfffc3c44; // app red
+      default:
+        return _blobColor;
+    }
+  }
   List<String> get availableDjs => _catalog.keys.toList()..sort();
 
   Map<String, dynamic> get djIdentity => {
         'id': 'dj_core_$_activeId',
-        'title': _activeId.replaceAll('_', ' ').toUpperCase(),
+        'title': displayName,
         'artist': 'MAI Radio · DJ',
         'cover_url': null,
         'provider': 'dj',
