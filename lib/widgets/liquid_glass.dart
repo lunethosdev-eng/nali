@@ -86,7 +86,7 @@ class LiquidGlass extends StatelessWidget {
           stops: const [0.0, 0.5, 1.0],
         ),
         border: Border.all(
-          color: Colors.white.withOpacity(0.22),
+          color: Colors.white.withOpacity(0.10),
           width: borderWidth,
         ),
       ),
@@ -219,42 +219,31 @@ class _RefractionRimPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Soft liquid edge only — no heavy RGB outline.
     final rrect = radius.toRRect(Offset.zero & size);
-    final inset = rrect.deflate(0.6);
-
-    final red = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4
-      ..color = const Color(0x55FF3B6B)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
-    canvas.drawRRect(rrect.inflate(0.4), red);
-
-    final cyan = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = const Color(0x4430E8FF)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.0);
-    canvas.drawRRect(inset, cyan);
-
-    final violet = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.9
-      ..color = const Color(0x33C77DFF)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
-    canvas.drawRRect(rrect, violet);
+    final inset = rrect.deflate(0.8);
 
     final gloss = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
-        end: Alignment.center,
+        end: Alignment.bottomRight,
         colors: [
-          Colors.white.withOpacity(0.22),
+          Colors.white.withOpacity(0.18),
+          Colors.white.withOpacity(0.04),
           Colors.white.withOpacity(0.0),
         ],
+        stops: const [0.0, 0.35, 1.0],
       ).createShader(Offset.zero & size)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1;
+      ..strokeWidth = 0.9;
     canvas.drawRRect(inset, gloss);
+
+    // Very light inner highlight (top edge)
+    final top = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.7
+      ..color = Colors.white.withOpacity(0.12);
+    canvas.drawRRect(rrect.deflate(0.3), top);
   }
 
   @override
