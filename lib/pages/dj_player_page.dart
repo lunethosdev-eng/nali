@@ -701,53 +701,91 @@ class _DjPlayerPageState extends State<DjPlayerPage>
   }
 
   Widget _lyricsOverlay(String title, String artist) {
-    return Container(
-      color: Colors.black.withOpacity(0.92),
-      child: SafeArea(
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => setState(() {
-                    _lyricsOpen = false;
-                    _lyrics = null;
-                  }),
-                  icon: const Icon(Icons.close, color: Colors.white),
-                ),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-            ),
-            Expanded(
-              child: _lyrics == null
-                  ? const Center(
-                      child: CircularProgressIndicator(color: Colors.white54))
-                  : _lyrics!.isEmpty
-                      ? Center(
-                          child: Text(
-                            t('Sin letras', 'No lyrics'),
-                            style: const TextStyle(color: Colors.white54),
+    final reduce = SettingsService.instance.effectiveReduceAnimations;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: reduce ? Duration.zero : const Duration(milliseconds: 380),
+      curve: const Cubic(0.22, 1.0, 0.36, 1.0),
+      builder: (context, v, child) => Opacity(
+        opacity: v,
+        child: Transform.translate(
+          offset: Offset(0, (1 - v) * 28),
+          child: child,
+        ),
+      ),
+      child: Material(
+        color: const Color(0xEE0A0A0C),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => setState(() {
+                        _lyricsOpen = false;
+                        _lyrics = null;
+                      }),
+                      icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
                           ),
-                        )
-                      : ListenableBuilder(
-                          listenable: PlayerController.instance,
-                          builder: (_, __) {
-                            return KaraokeLyrics(
-                              lrcText: _lyrics,
-                              position: PlayerController.instance.position,
-                            );
-                          },
-                        ),
-            ),
-          ],
+                          Text(
+                            artist,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: _lyrics == null
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.white38))
+                    : _lyrics!.isEmpty
+                        ? Center(
+                            child: Text(
+                              t('Sin letras', 'No lyrics'),
+                              style: const TextStyle(color: Colors.white54),
+                            ),
+                          )
+                        : ListenableBuilder(
+                            listenable: PlayerController.instance,
+                            builder: (_, __) {
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 20),
+                                child: KaraokeLyrics(
+                                  lrcText: _lyrics,
+                                  position: PlayerController.instance.position,
+                                ),
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -774,7 +812,7 @@ class _DjPlayerPageState extends State<DjPlayerPage>
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
             decoration: BoxDecoration(
-              color: const Color(0xFF142038),
+              color: const Color(0xFF141418),
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: Colors.white12),
             ),
@@ -997,6 +1035,7 @@ class _CoverOrb extends StatelessWidget {
   }
 }
 
+/// Perfect circle idle; concentric wave rings + spectrum bars while speaking.
 class _DjBlobPainter extends CustomPainter {
   _DjBlobPainter({
     required this.t,
@@ -1012,41 +1051,81 @@ class _DjBlobPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
-    final r = size.shortestSide * (0.34 + pulse * 0.03 + speak * 0.05);
-    final path = Path();
-    const n = 72;
-    for (var i = 0; i <= n; i++) {
-      final a = (i / n) * math.pi * 2;
-      final wobble = 1 +
-          0.14 * math.sin(a * 3 + t * math.pi * 2) +
-          0.09 * math.cos(a * 5 - t * math.pi * 2 * 1.3) +
-          speak * 0.06 * math.sin(a * 7 + t * 8);
-      final p = Offset(
-        c.dx + math.cos(a) * r * wobble,
-        c.dy + math.sin(a) * r * wobble,
-      );
-      if (i == 0) {
-        path.moveTo(p.dx, p.dy);
-      } else {
-        path.lineTo(p.dx, p.dy);
-      }
-    }
-    path.close();
+    final base = size.shortestSide * 0.28;
 
-    final paint = Paint()
+    // Soft ambient glow
+    final glow = Paint()
       ..shader = RadialGradient(
         colors: [
-          Color.lerp(color, Colors.white, 0.15 + speak * 0.1)!,
+          color.withOpacity(0.45 + speak * 0.25),
           color.withOpacity(0.0),
         ],
-      ).createShader(Rect.fromCircle(center: c, radius: r * 1.7));
-    canvas.drawPath(path, paint);
+      ).createShader(Rect.fromCircle(center: c, radius: base * 2.4));
+    canvas.drawCircle(c, base * 2.2, glow);
 
-    final stroke = Paint()
+    // Core circle (always perfect)
+    final coreR = base * (1.0 + pulse * 0.04 + speak * 0.08);
+    final core = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          Color.lerp(color, Colors.white, 0.22)!,
+          color,
+          color.withOpacity(0.55),
+        ],
+        stops: const [0.0, 0.55, 1.0],
+      ).createShader(Rect.fromCircle(center: c, radius: coreR));
+    canvas.drawCircle(c, coreR, core);
+
+    final rim = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4
-      ..color = Colors.white.withOpacity(0.35 + pulse * 0.2 + speak * 0.15);
-    canvas.drawPath(path, stroke);
+      ..strokeWidth = 1.6
+      ..color = Colors.white.withOpacity(0.28 + pulse * 0.12);
+    canvas.drawCircle(c, coreR, rim);
+
+    if (speak <= 0.02) return;
+
+    // Expanding wave rings while DJ speaks
+    for (var i = 0; i < 4; i++) {
+      final phase = (t * 1.4 + i * 0.22) % 1.0;
+      final ringR = coreR + 12 + phase * (28 + i * 18);
+      final alpha = (1.0 - phase) * speak * 0.45;
+      canvas.drawCircle(
+        c,
+        ringR,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4 - i * 0.2
+          ..color = color.withOpacity(alpha.clamp(0.0, 0.5)),
+      );
+    }
+
+    // Spectrum bars around the circle
+    const bars = 32;
+    for (var i = 0; i < bars; i++) {
+      final a = (i / bars) * math.pi * 2 - math.pi / 2;
+      final amp = 0.35 +
+          0.65 *
+              (0.5 +
+                  0.5 *
+                      math.sin(t * math.pi * 2 * 3 + i * 0.7) *
+                      math.cos(t * 5 + i * 0.3));
+      final len = (10 + amp * 22 * speak);
+      final inner = coreR + 6;
+      final p0 = Offset(c.dx + math.cos(a) * inner, c.dy + math.sin(a) * inner);
+      final p1 = Offset(
+        c.dx + math.cos(a) * (inner + len),
+        c.dy + math.sin(a) * (inner + len),
+      );
+      canvas.drawLine(
+        p0,
+        p1,
+        Paint()
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round
+          ..color = Color.lerp(color, Colors.white, 0.25)!
+              .withOpacity(0.35 + 0.5 * speak * amp),
+      );
+    }
   }
 
   @override
