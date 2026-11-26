@@ -40,6 +40,7 @@ import 'package:nali/screens/mix_editor_screen.dart';
 import 'package:nali/screens/player_layout_editor_screen.dart'
     show PlayerLayoutEditorScreen;
 import 'package:nali/screens/playlists_screen.dart';
+import 'package:nali/screens/playlist_defaults_screen.dart';
 import 'package:nali/screens/wrap_screen.dart';
 import 'package:nali/screens/local_import_screen.dart';
 import 'package:nali/screens/notifications_screen.dart';
@@ -289,6 +290,7 @@ class _NaliAppState extends State<NaliApp> {
         '/mix': (context) => const MixEditorScreen(),
         '/player_editor': (context) => const PlayerLayoutEditorScreen(),
         '/playlists': (context) => const PlaylistsScreen(),
+        '/playlist_defaults': (context) => const PlaylistDefaultsScreen(),
         '/wrap': (context) => const WrapScreen(),
         '/local_import': (context) => const LocalImportScreen(),
         '/notifications': (context) => const NotificationsScreen(),
