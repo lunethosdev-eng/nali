@@ -1109,93 +1109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _openPlaylistDefaults() {
-    final s = SettingsService.instance;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        return LiquidGlass(
-          blur: 28,
-          opacity: 0.14,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-          child: StatefulBuilder(
-            builder: (ctx, setModal) {
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(2)),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(t('Defaults de playlist', 'Playlist defaults'),
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18)),
-                    const SizedBox(height: 12),
-                    Text(t('Layout', 'Layout'),
-                        style: TextStyle(color: Colors.white.withOpacity(0.6))),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final o in [
-                          ('compact', 'Compacta'),
-                          ('comfortable', 'Cómoda'),
-                          ('large', 'Grande'),
-                        ])
-                          ChoiceChip(
-                            label: Text(o.$2),
-                            selected: s.playlistListLayout == o.$1,
-                            selectedColor: const Color(0xfffc3c44),
-                            labelStyle: const TextStyle(color: Colors.white),
-                            backgroundColor: Colors.white12,
-                            onSelected: (_) async {
-                              await s.setString('pl_list_layout', o.$1);
-                              setModal(() {});
-                            },
-                          ),
-                      ],
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      activeColor: const Color(0xfffc3c44),
-                      title: Text(t('Numeración', 'Numbers'),
-                          style: const TextStyle(color: Colors.white)),
-                      value: s.playlistShowNumbers,
-                      onChanged: (v) async {
-                        await s.setFlag('pl_numbers', v);
-                        setModal(() {});
-                      },
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      activeColor: const Color(0xfffc3c44),
-                      title: Text(t('Asas de arrastre', 'Drag handles'),
-                          style: const TextStyle(color: Colors.white)),
-                      value: s.playlistDragHandles,
-                      onChanged: (v) async {
-                        await s.setFlag('pl_drag', v);
-                        setModal(() {});
-                      },
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
+    Navigator.pushNamed(context, '/playlist_defaults');
   }
 
   Widget _editorCard({
@@ -1292,6 +1206,7 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
   bool _ready = false;
   bool _enabled = false;
   String _active = 'nugget_dj';
+  String _placement = 'none';
   List<String> _djs = const [];
 
   @override
@@ -1307,6 +1222,7 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
     setState(() {
       _enabled = d.enabled;
       _active = d.activeId;
+      _placement = d.placement;
       _djs = d.availableDjs;
       _ready = true;
     });
@@ -1321,6 +1237,7 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
       );
     }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SwitchListTile(
           title: const Text('Activar DJ de voz', style: TextStyle(color: Colors.white)),
@@ -1333,7 +1250,52 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
             setState(() => _enabled = v);
           },
         ),
-        if (_djs.isNotEmpty)
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Text('Dónde mostrar MAI Radio',
+              style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+        ),
+        RadioListTile<String>(
+          value: 'none',
+          groupValue: _placement,
+          activeColor: const Color(0xff5CE1C5),
+          title: const Text('Solo desde Ajustes', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Abrir con el botón de abajo', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          onChanged: (v) async {
+            if (v == null) return;
+            await DjService.instance.setPlacement(v);
+            setState(() => _placement = v);
+          },
+        ),
+        RadioListTile<String>(
+          value: 'home',
+          groupValue: _placement,
+          activeColor: const Color(0xff5CE1C5),
+          title: const Text('Como tarjeta en Home', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Aparece como una “canción” / atajo', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          onChanged: (v) async {
+            if (v == null) return;
+            await DjService.instance.setPlacement(v);
+            setState(() => _placement = v);
+          },
+        ),
+        RadioListTile<String>(
+          value: 'nav',
+          groupValue: _placement,
+          activeColor: const Color(0xff5CE1C5),
+          title: const Text('En el nav inferior', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Sustituye un slot (requiere rebuild de nav)', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          onChanged: (v) async {
+            if (v == null) return;
+            await DjService.instance.setPlacement(v);
+            setState(() => _placement = v);
+          },
+        ),
+        if (_djs.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text('Voice pack', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
+          ),
           ..._djs.map((id) => RadioListTile<String>(
                 value: id,
                 groupValue: _active,
@@ -1346,6 +1308,7 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
                   setState(() => _active = v);
                 },
               )),
+        ],
       ],
     );
   }
