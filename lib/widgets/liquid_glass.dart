@@ -86,7 +86,7 @@ class LiquidGlass extends StatelessWidget {
           stops: const [0.0, 0.5, 1.0],
         ),
         border: Border.all(
-          color: Colors.white.withOpacity(0.10),
+          color: Colors.white.withOpacity(0.18),
           width: borderWidth,
         ),
       ),
@@ -213,37 +213,49 @@ class LiquidGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
 
 /// Soft RGB fringe along the glass edge — light bending through liquid.
+
+/// Soft chromatic fringe painted INSIDE the glass edge (not outside outline).
 class _RefractionRimPainter extends CustomPainter {
   _RefractionRimPainter({required this.radius});
   final BorderRadius radius;
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Soft liquid edge only — no heavy RGB outline.
+    if (size.width <= 0 || size.height <= 0) return;
     final rrect = radius.toRRect(Offset.zero & size);
-    final inset = rrect.deflate(0.8);
 
+    // Inner inset so the fringe sits inside the pill, not as outer stroke.
+    final inner = rrect.deflate(1.2);
+
+    // Magenta/red fringe along top-left inner edge
+    final magenta = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.15
+      ..color = const Color(0x33FF4D8D)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.8);
+    canvas.drawRRect(inner.inflate(0.3), magenta);
+
+    // Cyan fringe shifted slightly (chromatic split)
+    final cyan = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = const Color(0x2840E8FF)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.7);
+    canvas.drawRRect(inner.deflate(0.4), cyan);
+
+    // Soft white specular inside top
     final gloss = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
+        end: Alignment.centerRight,
         colors: [
-          Colors.white.withOpacity(0.18),
-          Colors.white.withOpacity(0.04),
+          Colors.white.withOpacity(0.28),
           Colors.white.withOpacity(0.0),
         ],
-        stops: const [0.0, 0.35, 1.0],
       ).createShader(Offset.zero & size)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.9;
-    canvas.drawRRect(inset, gloss);
-
-    // Very light inner highlight (top edge)
-    final top = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.7
-      ..color = Colors.white.withOpacity(0.12);
-    canvas.drawRRect(rrect.deflate(0.3), top);
+      ..strokeWidth = 1.0;
+    canvas.drawRRect(inner, gloss);
   }
 
   @override
