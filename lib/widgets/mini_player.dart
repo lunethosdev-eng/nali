@@ -232,7 +232,7 @@ class _MiniPlayerState extends State<MiniPlayer> {
             return AnimatedAlign(
               alignment: collapse ? alignment : Alignment.center,
               duration: animationDuration,
-              curve: Curves.easeOutCubic,
+              curve: const Cubic(0.22, 1.0, 0.36, 1.0),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: AnimatedContainer(
