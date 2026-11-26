@@ -6,6 +6,8 @@ import 'package:nali/widgets/compact_header.dart';
 import 'package:nali/services/supabase_service.dart';
 import 'package:nali/services/listening_history.dart';
 import 'package:nali/services/settings_service.dart';
+import 'package:nali/services/dj_service.dart';
+import 'package:nali/pages/dj_player_page.dart';
 import 'package:nali/services/follow_service.dart';
 import 'package:nali/services/player_controller.dart';
 import 'package:nali/services/notification_service.dart';
@@ -321,6 +323,8 @@ class _HomePageState extends State<HomePage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (_recent.isNotEmpty) ...[
+                          if (DjService.instance.placement == 'home')
+                            _RadioHomeCard(),
                           _sectionTitle(t('Escuchado recientemente', 'Recently played')),
                           _hList(_recent),
                           const SizedBox(height: 22),
@@ -481,6 +485,78 @@ class _FollowedArtistAvatarState extends State<_FollowedArtistAvatar> {
       child: img == null
           ? const Icon(Icons.person, color: Colors.white38)
           : null,
+    );
+  }
+}
+
+
+class _RadioHomeCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final name = DjService.instance.displayName;
+    final accent = Color(DjService.instance.accentColor);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const DjPlayerPage()),
+            );
+          },
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                colors: [
+                  accent.withOpacity(0.28),
+                  const Color(0xFF1A1A1E),
+                ],
+              ),
+              border: Border.all(color: accent.withOpacity(0.45)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent.withOpacity(0.25),
+                    ),
+                    child: Icon(Icons.radio_rounded, color: accent),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15)),
+                        Text(
+                          SettingsService.instance.locale == 'en'
+                              ? 'Voice radio · tap to open'
+                              : 'Radio con voz · toca para abrir',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.play_arrow_rounded, color: accent, size: 28),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
