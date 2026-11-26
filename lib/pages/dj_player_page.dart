@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -26,6 +27,8 @@ class _DjPlayerPageState extends State<DjPlayerPage>
   late final AnimationController _speakPulse;
 
   bool _building = false;
+  bool _voicePhase = true; // showing blob, waiting for voice to end
+  StreamSubscription? _voiceSub;
   bool _showSettings = false;
   bool _liked = false;
   bool _lyricsOpen = false;
@@ -66,17 +69,27 @@ class _DjPlayerPageState extends State<DjPlayerPage>
     _balance = dj.balance;
     _genreFocus = dj.genreFocus;
     _blobColor = Color(dj.blobColor);
+    _voicePhase = true;
     if (mounted) setState(() {});
-    // Voice first — before queue build
+
+    // Listen once: when voice ends → crossfade into music
+    _voiceSub?.cancel();
+    _voiceSub = dj.onVoiceComplete.listen((event) {
+      if (!mounted) return;
+      if (event == DjService.eventWelcome || event == DjService.eventBuilding) {
+        unawaited(_crossfadeIntoMusic());
+      }
+    });
+
+    // Build queue silently (don't start audible play yet)
+    await _prepareQueue();
+    // Speak welcome — song waits until voice completes
     await dj.welcome();
-    await Future.delayed(const Duration(milliseconds: 400));
-    await _buildAndPlay();
   }
 
-  Future<void> _buildAndPlay() async {
+  Future<void> _prepareQueue() async {
     if (!mounted) return;
     setState(() => _building = true);
-    await DjService.instance.onBuilding();
     try {
       final songs = <Map<String, dynamic>>[];
       try {
@@ -93,12 +106,59 @@ class _DjPlayerPageState extends State<DjPlayerPage>
       songs.shuffle();
       final take = math.min(25, songs.length);
       if (take > 0) {
-        await PlayerController.instance
-            .playPlaylist(songs.take(take).toList(), startIndex: 0);
+        // Load into controller queue but keep music silent until voice ends
+        final pc = PlayerController.instance;
+        pc.queue = List<Map<String, dynamic>>.from(songs.take(take));
+        pc.queueIndex = 0;
+        // Mute music players while voice speaks
+        try {
+          await pc.pause();
+        } catch (_) {}
       }
     } finally {
       if (mounted) setState(() => _building = false);
     }
+  }
+
+  /// After DJ voice ends: fade voice out (already ending) and ramp music in.
+  Future<void> _crossfadeIntoMusic() async {
+    if (!mounted) return;
+    final dj = DjService.instance;
+    final xfade = dj.voiceXfade; // 3–4s typical
+    final pc = PlayerController.instance;
+    if (pc.queue.isEmpty) {
+      setState(() => _voicePhase = false);
+      return;
+    }
+    setState(() {
+      _voicePhase = false;
+      _building = true;
+    });
+    try {
+      // Start first track
+      await pc.playPlaylist(pc.queue, startIndex: pc.queueIndex);
+      // Soft volume ramp on music for voiceXfade seconds
+      final steps = 16;
+      final stepMs = (xfade * 1000 / steps).round().clamp(40, 400);
+      for (var i = 1; i <= steps; i++) {
+        if (!mounted) return;
+        final tNorm = i / steps;
+        // voice fades if still speaking
+        await dj.setVoiceVolume(1.0 - tNorm);
+        await Future.delayed(Duration(milliseconds: stepMs));
+      }
+      await dj.setVoiceVolume(0);
+    } finally {
+      if (mounted) setState(() => _building = false);
+    }
+  }
+
+  Future<void> _buildAndPlay() async {
+    // Rebuild radio: voice "building" then music
+    setState(() => _voicePhase = true);
+    await DjService.instance.onBuilding();
+    await _prepareQueue();
+    // If building clip is short/missing, onVoiceComplete still fires
   }
 
   @override
@@ -212,10 +272,12 @@ class _DjPlayerPageState extends State<DjPlayerPage>
       builder: (context, _) {
         final song = pc.currentSong;
         final hasTrack = song != null;
-        final title =
-            (song?['title'] ?? t('MAI al habla…', 'MAI speaking…')).toString();
-        final artist =
-            (song?['artist'] ?? 'MAI Radio').toString();
+        final title = _voicePhase
+            ? t('MAI al habla…', 'MAI speaking…')
+            : (song?['title'] ?? t('MAI al habla…', 'MAI speaking…')).toString();
+        final artist = _voicePhase
+            ? 'MAI Radio'
+            : (song?['artist'] ?? 'MAI Radio').toString();
         final cover =
             (song?['cover_url'] ?? song?['animated_cover_url'])?.toString();
         final pos = pc.position;
@@ -313,7 +375,7 @@ class _DjPlayerPageState extends State<DjPlayerPage>
                     SizedBox(
                       height: 240,
                       width: 240,
-                      child: hasTrack && cover != null && cover.isNotEmpty
+                      child: (!_voicePhase && hasTrack && cover != null && cover.isNotEmpty)
                           ? _CoverOrb(
                               url: cover,
                               pulse: _pulse,
@@ -327,7 +389,7 @@ class _DjPlayerPageState extends State<DjPlayerPage>
                                 painter: _DjBlobPainter(
                                   t: _blob.value,
                                   pulse: _pulse.value,
-                                  speak: speaking ? _speakPulse.value : 0,
+                                  speak: (speaking || _voicePhase) ? _speakPulse.value : 0,
                                   color: _blobColor,
                                 ),
                               ),
@@ -366,43 +428,115 @@ class _DjPlayerPageState extends State<DjPlayerPage>
                     const SizedBox(height: 18),
                     // Progress
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      padding: const EdgeInsets.symmetric(horizontal: 28),
                       child: Column(
                         children: [
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 3.5,
-                              thumbShape: const RoundSliderThumbShape(
-                                  enabledThumbRadius: 7),
-                              overlayShape: const RoundSliderOverlayShape(
-                                  overlayRadius: 16),
-                              activeTrackColor: _blobColor,
-                              inactiveTrackColor: Colors.white24,
-                              thumbColor: Colors.white,
-                            ),
-                            child: Slider(
-                              value: progress,
-                              onChanged: (v) {
-                                pc.seekTo(Duration(
-                                    milliseconds:
-                                        (v * dur.inMilliseconds).round()));
-                              },
-                            ),
-                          ),
-                          Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 6),
-                            child: Row(
-                              children: [
-                                Text(_fmt(pos),
-                                    style: const TextStyle(
-                                        color: Colors.white54, fontSize: 11)),
-                                const Spacer(),
-                                Text(_fmt(dur),
-                                    style: const TextStyle(
-                                        color: Colors.white54, fontSize: 11)),
-                              ],
-                            ),
+                          // Custom glowing progress
+                          LayoutBuilder(builder: (context, box) {
+                            final w = box.maxWidth;
+                            return GestureDetector(
+                              onTapDown: _voicePhase
+                                  ? null
+                                  : (d) {
+                                      final v = (d.localPosition.dx / w)
+                                          .clamp(0.0, 1.0);
+                                      pc.seekTo(Duration(
+                                          milliseconds: (v *
+                                                  dur.inMilliseconds)
+                                              .round()));
+                                    },
+                              onHorizontalDragUpdate: _voicePhase
+                                  ? null
+                                  : (d) {
+                                      final v = (d.localPosition.dx / w)
+                                          .clamp(0.0, 1.0);
+                                      pc.seekTo(Duration(
+                                          milliseconds: (v *
+                                                  dur.inMilliseconds)
+                                              .round()));
+                                    },
+                              child: SizedBox(
+                                height: 28,
+                                child: Stack(
+                                  alignment: Alignment.centerLeft,
+                                  children: [
+                                    // Track
+                                    Container(
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        borderRadius:
+                                            BorderRadius.circular(4),
+                                        color: Colors.white.withOpacity(0.12),
+                                      ),
+                                    ),
+                                    // Active fill with gradient glow
+                                    AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 80),
+                                      width: w *
+                                          (_voicePhase ? 0 : progress),
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        borderRadius:
+                                            BorderRadius.circular(4),
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            _blobColor.withOpacity(0.55),
+                                            _blobColor,
+                                            Colors.white.withOpacity(0.9),
+                                          ],
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: _blobColor
+                                                .withOpacity(0.55),
+                                            blurRadius: 10,
+                                            spreadRadius: 0.5,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Thumb
+                                    if (!_voicePhase)
+                                      Positioned(
+                                        left: (w * progress - 8)
+                                            .clamp(0.0, w - 16),
+                                        child: Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: Colors.white,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: _blobColor
+                                                    .withOpacity(0.6),
+                                                blurRadius: 12,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                  _voicePhase ? '0:00' : _fmt(pos),
+                                  style: const TextStyle(
+                                      color: Colors.white54, fontSize: 11)),
+                              const Spacer(),
+                              Text(
+                                  _voicePhase
+                                      ? t('voz', 'voice')
+                                      : _fmt(dur),
+                                  style: const TextStyle(
+                                      color: Colors.white54, fontSize: 11)),
+                            ],
                           ),
                         ],
                       ),
@@ -739,6 +873,24 @@ class _DjPlayerPageState extends State<DjPlayerPage>
                     style: TextStyle(
                         color: Colors.white.withOpacity(0.7), fontSize: 13),
                   ),
+                ),
+                Text(t('Crossfade voz → canción', 'Voice → song crossfade'),
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.w600)),
+                Text(
+                  '${DjService.instance.voiceXfade.toStringAsFixed(1)}s',
+                  style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                ),
+                Slider(
+                  value: DjService.instance.voiceXfade,
+                  min: 1.5,
+                  max: 6.0,
+                  divisions: 9,
+                  activeColor: _blobColor,
+                  onChanged: (v) async {
+                    await DjService.instance.setVoiceXfade(v);
+                    setState(() {});
+                  },
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
