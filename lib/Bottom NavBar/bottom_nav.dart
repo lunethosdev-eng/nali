@@ -5,7 +5,6 @@ import 'dart:math' as math;
 import 'package:nali/pages/browse_page.dart';
 import 'package:nali/pages/home_page.dart';
 import 'package:nali/pages/library_page.dart';
-import 'package:nali/pages/radio.dart';
 import 'package:nali/pages/search_page.dart';
 import 'package:nali/widgets/liquid_glass.dart';
 import 'package:nali/widgets/mini_player.dart';
@@ -40,7 +39,6 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
   final List<Widget> _pages = [
     HomePage(),
     BrowsePage(),
-    RadioPage(),
     LibraryPage(),
     SearchPage(),
   ];
@@ -48,15 +46,14 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
   final List<IconData> _icons = [
     Icons.home_filled,
     Icons.grid_view_rounded,
-    Icons.sensors,
     Icons.subscriptions_rounded,
     Icons.search,
   ];
 
-  final List<String> _labels = ['Home', 'Browse', 'Radio', 'Library', 'Search'];
+  final List<String> _labels = ['Home', 'Browse', 'Library', 'Search'];
 
-  static const _collapsedMain = [0, 3]; // Home, Library
-  static const _searchIdx = 4;
+  static const _collapsedMain = [0, 2]; // Home, Library
+  static const _searchIdx = 3;
 
   @override
   void initState() {
