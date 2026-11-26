@@ -5,21 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// DJ voice core. Scans folders under `assets/dj/<dj_id>/<event>/`.
-///
-/// Layout (add as many clips as you want — random pick each time):
-/// ```
-/// assets/dj/nugget_dj/
-///   welcome/
-///   pause/
-///   skip/
-///   shuffle/
-///   playlist_end/
-///   low_battery/
-///   building_playlist/
-///   favorites/
-///   transitions/
-/// ```
+/// DJ voice core. Scans `assets/dj/<dj_id>/<event>/*.mp3` and picks randomly.
 class DjService {
   DjService._();
   static final DjService instance = DjService._();
@@ -27,6 +13,8 @@ class DjService {
   static const _prefEnabled = 'dj_enabled';
   static const _prefActive = 'dj_active_id';
   static const _prefBalance = 'dj_music_balance';
+  static const _prefPlacement = 'dj_placement'; // none | home | nav
+  static const _prefBlobColor = 'dj_blob_color';
 
   static const eventWelcome = 'welcome';
   static const eventPause = 'pause';
@@ -46,8 +34,9 @@ class DjService {
   bool _genreFocus = false;
   bool _ready = false;
   bool _playingVoice = false;
+  String _placement = 'none'; // none | home | nav
+  int _blobColor = 0xFF5CE1C5;
 
-  /// djId → event → asset paths
   final Map<String, Map<String, List<String>>> _catalog = {};
 
   bool get enabled => _enabled;
@@ -55,6 +44,8 @@ class DjService {
   double get balance => _balance;
   bool get genreFocus => _genreFocus;
   bool get isSpeaking => _playingVoice;
+  String get placement => _placement;
+  int get blobColor => _blobColor;
   List<String> get availableDjs => _catalog.keys.toList()..sort();
 
   Map<String, dynamic> get djIdentity => {
@@ -72,6 +63,15 @@ class DjService {
     _enabled = prefs.getBool(_prefEnabled) ?? false;
     _activeId = prefs.getString(_prefActive) ?? 'nugget_dj';
     _balance = prefs.getDouble(_prefBalance) ?? 0.5;
+    _placement = prefs.getString(_prefPlacement) ?? 'none';
+    _blobColor = prefs.getInt(_prefBlobColor) ?? 0xFF5CE1C5;
+    try {
+      await _voice.setReleaseMode(ReleaseMode.stop);
+      await _voice.setPlayerMode(PlayerMode.mediaPlayer);
+      await _voice.setVolume(1.0);
+    } catch (e) {
+      debugPrint('DjService player setup: $e');
+    }
     await _scanAssets();
     _ready = true;
   }
@@ -94,7 +94,63 @@ class DjService {
     await prefs.setDouble(_prefBalance, _balance);
   }
 
+  Future<void> setPlacement(String v) async {
+    if (!const ['none', 'home', 'nav'].contains(v)) return;
+    _placement = v;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefPlacement, v);
+  }
+
+  Future<void> setBlobColor(int color) async {
+    _blobColor = color;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_prefBlobColor, color);
+  }
+
   void setGenreFocus(bool v) => _genreFocus = v;
+
+  /// Bundled fallback when AssetManifest is empty (web/hot-reload edge cases).
+  static const Map<String, List<String>> _fallback = {
+    'welcome': [
+      'dj/nugget_dj/welcome/welcome_01.mp3',
+      'dj/nugget_dj/welcome/welcome_02.mp3',
+      'dj/nugget_dj/welcome/welcome_03.mp3',
+      'dj/nugget_dj/welcome/welcome_04.mp3',
+    ],
+    'pause': [
+      'dj/nugget_dj/pause/pause_01.mp3',
+      'dj/nugget_dj/pause/pause_02.mp3',
+    ],
+    'skip': [
+      'dj/nugget_dj/skip/skip_01.mp3',
+      'dj/nugget_dj/skip/skip_02.mp3',
+      'dj/nugget_dj/skip/skip_03.mp3',
+    ],
+    'shuffle': [
+      'dj/nugget_dj/shuffle/shuffle_01.mp3',
+      'dj/nugget_dj/shuffle/shuffle_02.mp3',
+    ],
+    'playlist_end': [
+      'dj/nugget_dj/playlist_end/playlist_end_01.mp3',
+      'dj/nugget_dj/playlist_end/playlist_end_02.mp3',
+    ],
+    'low_battery': [
+      'dj/nugget_dj/low_battery/low_battery_01.mp3',
+      'dj/nugget_dj/low_battery/low_battery_02.mp3',
+    ],
+    'building_playlist': [
+      'dj/nugget_dj/building_playlist/building_01.mp3',
+      'dj/nugget_dj/building_playlist/building_02.mp3',
+    ],
+    'favorites': [
+      'dj/nugget_dj/favorites/favorites_01.mp3',
+      'dj/nugget_dj/favorites/favorites_02.mp3',
+      'dj/nugget_dj/favorites/favorites_03.mp3',
+    ],
+    'transitions': [
+      'dj/nugget_dj/transitions/transition_01.mp3',
+    ],
+  };
 
   Future<void> _scanAssets() async {
     _catalog.clear();
@@ -111,35 +167,28 @@ class DjService {
             lower.endsWith('.mp4'))) {
           continue;
         }
-        // assets/dj/<dj_id>/<event>/file.ext
         final parts = path.split('/');
         if (parts.length < 5) continue;
         final djId = parts[2];
         final event = parts[3];
+        final relative =
+            path.startsWith('assets/') ? path.substring(7) : path;
         _catalog
             .putIfAbsent(djId, () => {})
             .putIfAbsent(event, () => [])
-            .add(path);
+            .add(relative);
       }
     } catch (e) {
       debugPrint('DjService scan: $e');
     }
     _catalog.putIfAbsent('nugget_dj', () => {});
-    for (final e in [
-      eventWelcome,
-      eventPause,
-      eventSkip,
-      eventShuffle,
-      eventPlaylistEnd,
-      eventLowBattery,
-      eventBuilding,
-      eventFavorites,
-      eventTransitions,
-    ]) {
-      _catalog['nugget_dj']!.putIfAbsent(e, () => []);
+    // Merge fallbacks so voice always has something to play
+    for (final e in _fallback.entries) {
+      final list = _catalog['nugget_dj']!.putIfAbsent(e.key, () => []);
+      if (list.isEmpty) list.addAll(e.value);
     }
     debugPrint(
-      'DjService catalog: ${_catalog.map((k, v) => MapEntry(k, v.map((e, files) => MapEntry(e, files.length))))}',
+      'DjService ready: ${_catalog['nugget_dj']!.map((k, v) => MapEntry(k, v.length))}',
     );
   }
 
@@ -147,7 +196,11 @@ class DjService {
 
   List<String> clipsFor(String event) {
     final dj = _catalog[_activeId] ?? const {};
-    return List<String>.from(dj[event] ?? const []);
+    final list = List<String>.from(dj[event] ?? const []);
+    if (list.isEmpty && _activeId == 'nugget_dj') {
+      return List<String>.from(_fallback[event] ?? const []);
+    }
+    return list;
   }
 
   String? _randomClip(String event) {
@@ -157,25 +210,38 @@ class DjService {
   }
 
   Future<void> playEvent(String event) async {
-    if (!_enabled) return;
     await init();
+    if (!_enabled) {
+      debugPrint('DjService: disabled, skip $event');
+      return;
+    }
     final path = _randomClip(event);
     if (path == null) {
-      debugPrint('DjService: no clips in $_activeId/$event');
+      debugPrint('DjService: no clips for $event');
       return;
     }
     try {
       _playingVoice = true;
       await _voice.stop();
+      // path is already relative to assets/ (e.g. dj/nugget_dj/welcome/…)
       final relative =
-          path.startsWith('assets/') ? path.substring('assets/'.length) : path;
+          path.startsWith('assets/') ? path.substring(7) : path;
+      debugPrint('DjService playing AssetSource($relative)');
       await _voice.play(AssetSource(relative));
       _voice.onPlayerComplete.first.then((_) {
         _playingVoice = false;
       });
     } catch (e) {
       _playingVoice = false;
-      debugPrint('DjService play $event: $e');
+      debugPrint('DjService play $event ERROR: $e');
+      // Retry alternate path form
+      try {
+        final alt = path.startsWith('dj/') ? path : 'dj/$_activeId/$event/${path.split('/').last}';
+        await _voice.play(AssetSource(alt));
+        _playingVoice = true;
+      } catch (e2) {
+        debugPrint('DjService retry failed: $e2');
+      }
     }
   }
 
