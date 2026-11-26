@@ -657,3 +657,42 @@ class _ArtistPageState extends State<ArtistPage> {
 }
 
 T consecutive<T>(T value) => value;
+
+
+class _ScaleButton extends StatefulWidget {
+  const _ScaleButton({required this.child, required this.onTap});
+  final Widget child;
+  final VoidCallback onTap;
+  @override
+  State<_ScaleButton> createState() => _ScaleButtonState();
+}
+
+class _ScaleButtonState extends State<_ScaleButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 120));
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => _c.forward(),
+      onTapUp: (_) async {
+        await _c.reverse();
+        widget.onTap();
+      },
+      onTapCancel: () => _c.reverse(),
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (_, child) {
+          final s = 1.0 - Curves.easeOut.transform(_c.value) * 0.08;
+          return Transform.scale(scale: s, child: child);
+        },
+        child: widget.child,
+      ),
+    );
+  }
+}
