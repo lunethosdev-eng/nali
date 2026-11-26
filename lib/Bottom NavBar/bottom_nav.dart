@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
+import 'package:nali/pages/dj_player_page.dart';
+import 'package:nali/services/dj_service.dart';
 import 'package:nali/pages/browse_page.dart';
 import 'package:nali/pages/home_page.dart';
 import 'package:nali/pages/library_page.dart';
@@ -49,7 +51,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
         base[0],
         base[1],
         base[2],
-        const DjPlayerPage(),
+        DjPlayerPage(),
         base[3],
       ];
     }
