@@ -103,8 +103,29 @@ class _MixEditorScreenState extends State<MixEditorScreen>
     super.dispose();
   }
 
+
+  /// Prefer dedicated stem URLs when present in Supabase song row.
+  /// Optional columns: vocal_url / vocals_url, instrumental_url / no_vocal_url.
+  String? _stemUrl(Map<String, dynamic>? song, String mode) {
+    if (song == null) return null;
+    final full = (song['audio_url'] ?? song['stream_url'] ?? '').toString();
+    final vocal = (song['vocal_url'] ?? song['vocals_url'] ?? '').toString();
+    final inst =
+        (song['instrumental_url'] ?? song['no_vocal_url'] ?? '').toString();
+    switch (mode) {
+      case 'voice_only':
+        return vocal.isNotEmpty ? vocal : null;
+      case 'no_voice':
+        return inst.isNotEmpty ? inst : null;
+      default:
+        return full.isNotEmpty ? full : null;
+    }
+  }
+
   Future<void> _prep(Map<String, dynamic> song, bool isA) async {
-    final url = (song['audio_url'] ?? song['stream_url'] ?? '').toString();
+    final mode = isA ? _stemModeA : _stemModeB;
+    final url = _stemUrl(song, mode) ??
+        (song['audio_url'] ?? song['stream_url'] ?? '').toString();
     if (url.isEmpty) return;
     try {
       final p = isA ? _playerA : _playerB;
@@ -131,7 +152,7 @@ class _MixEditorScreenState extends State<MixEditorScreen>
       _playerB.setVolume(0.85);
       if (!_bStarted) {
         _bStarted = true;
-        final url =
+        final url = _stemUrl(trackB, _stemModeB) ??
             (trackB!['audio_url'] ?? trackB!['stream_url'] ?? '').toString();
         if (url.isNotEmpty) _playerB.play(UrlSource(url));
       }
@@ -165,13 +186,13 @@ class _MixEditorScreenState extends State<MixEditorScreen>
       return;
     }
     if (trackA == null) return;
-    final urlA =
+    final urlA = _stemUrl(trackA, _stemModeA) ??
         (trackA!['audio_url'] ?? trackA!['stream_url'] ?? '').toString();
     if (urlA.isEmpty) return;
     _bStarted = false;
     await _playerA.play(UrlSource(urlA));
     if (_mixMode == 'dual' && trackB != null) {
-      final urlB =
+      final urlB = _stemUrl(trackB, _stemModeB) ??
           (trackB!['audio_url'] ?? trackB!['stream_url'] ?? '').toString();
       if (urlB.isNotEmpty) {
         await _playerB.play(UrlSource(urlB));
@@ -482,10 +503,10 @@ class _MixEditorScreenState extends State<MixEditorScreen>
                           fontSize: 13)),
                   const SizedBox(height: 6),
                   _stemRow(t('Pista A', 'Track A'), _stemModeA,
-                      (v) => setState(() => _stemModeA = v)),
+                      (v) async { setState(() => _stemModeA = v); if (trackA != null) await _prep(trackA!, true); }),
                   const SizedBox(height: 4),
                   _stemRow(t('Pista B', 'Track B'), _stemModeB,
-                      (v) => setState(() => _stemModeB = v)),
+                      (v) async { setState(() => _stemModeB = v); if (trackB != null) await _prep(trackB!, false); }),
                 ],
               ),
             ),
