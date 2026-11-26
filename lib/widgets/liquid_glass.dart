@@ -210,3 +210,54 @@ class LiquidGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
+
+/// Soft RGB fringe along the glass edge — light bending through liquid.
+class _RefractionRimPainter extends CustomPainter {
+  _RefractionRimPainter({required this.radius});
+  final BorderRadius radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = radius.toRRect(Offset.zero & size);
+    final inset = rrect.deflate(0.6);
+
+    final red = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..color = const Color(0x55FF3B6B)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.2);
+    canvas.drawRRect(rrect.inflate(0.4), red);
+
+    final cyan = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = const Color(0x4430E8FF)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.0);
+    canvas.drawRRect(inset, cyan);
+
+    final violet = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.9
+      ..color = const Color(0x33C77DFF)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
+    canvas.drawRRect(rrect, violet);
+
+    final gloss = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.center,
+        colors: [
+          Colors.white.withOpacity(0.22),
+          Colors.white.withOpacity(0.0),
+        ],
+      ).createShader(Offset.zero & size)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1;
+    canvas.drawRRect(inset, gloss);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RefractionRimPainter old) =>
+      old.radius != radius;
+}
