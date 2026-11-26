@@ -91,6 +91,10 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
 
   static const _collapsedMain = [0, 2]; // Home, Library
   int get _searchIdx => DjService.instance.placement == 'nav' ? 4 : 3;
+  int? get _radioIdx =>
+      DjService.instance.placement == 'nav' ? 3 : null;
+  bool get _onRadioTab =>
+      _radioIdx != null && _selectedIndex == _radioIdx;
 
   @override
   void initState() {
@@ -385,16 +389,17 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
               children: [
                 _pages[_selectedIndex],
                 // More gap between mini player and nav
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: _navCollapsed ? 86 : 100,
-                  child: MiniPlayer(compact: _navCollapsed),
-                ),
+                if (!_onRadioTab)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: _navCollapsed ? 86 : 100,
+                    child: MiniPlayer(compact: _navCollapsed),
+                  ),
               ],
             ),
           ),
-          bottomNavigationBar: Padding(
+          bottomNavigationBar: _onRadioTab ? null : Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
             child: AnimatedBuilder(
               animation: _collapseCtrl,
