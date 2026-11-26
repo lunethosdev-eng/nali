@@ -115,6 +115,15 @@ class LiquidGlass extends StatelessWidget {
                 ),
               ),
             ),
+          // Chromatic refraction rim (liquid light fringe)
+          if (enabled)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _RefractionRimPainter(radius: radius),
+                ),
+              ),
+            ),
           child,
         ],
       ),
