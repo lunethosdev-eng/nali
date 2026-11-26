@@ -471,11 +471,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               ],
               if (widget.category == 'dj') ...[
-                _section(t('DJ / MAI Radio', 'DJ / MAI Radio')),
+                _section(t('Radio', 'Radio')),
                 const _DjSettingsPanel(),
                 ListTile(
-                  leading: const Icon(Icons.radio_rounded, color: Color(0xff5CE1C5)),
-                  title: Text(t('Abrir MAI Radio', 'Open MAI Radio'), style: const TextStyle(color: Colors.white)),
+                  leading: const Icon(Icons.radio_rounded, color: Color(0xfffc3c44)),
+                  title: Text(t('Abrir Radio', 'Open Radio'), style: const TextStyle(color: Colors.white)),
                   subtitle: Text(t('Pantalla dedicada con blob y voz', 'Dedicated blob + voice screen'), style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   onTap: () => Navigator.of(context).pushNamed('/dj'),
                 ),
@@ -970,7 +970,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'privacy' => t('Privacidad', 'Privacy'), 'personalization' => t('Personalización', 'Personalization'),
     'playback' => t('Reproducción', 'Playback'), 'lyrics' => t('Letras', 'Lyrics'),
     'library' => t('Biblioteca', 'Library'), 'notifications' => t('Notificaciones', 'Notifications'),
-    'social' => t('Social', 'Social'), 'dj' => t('DJ / MAI Radio', 'DJ / MAI Radio'), 'canvas' => t('Canvas', 'Canvas'), 'advanced' => t('Ajustes avanzados', 'Advanced settings'),
+    'social' => t('Social', 'Social'), 'dj' => t('Radio', 'Radio'), 'canvas' => t('Canvas', 'Canvas'), 'advanced' => t('Ajustes avanzados', 'Advanced settings'),
     _ => t('Ajustes', 'Settings'),
   };
 
@@ -985,7 +985,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ('library', Icons.library_music_outlined, t('Caché, importación y playlists', 'Cache, imports and playlists'), const Color(0xffa7c77a)),
       ('notifications', Icons.notifications_none_rounded, t('Sonidos y alertas', 'Sounds and alerts'), const Color(0xffffca70)),
       ('social', Icons.people_outline_rounded, t('Escucha compartida y comunidad', 'Shared listening and community'), const Color(0xff7fc4c9)),
-      ('dj', Icons.podcasts_rounded, t('MAI Radio / DJ de voz', 'MAI Radio / voice DJ'), const Color(0xff5CE1C5)),
+      ('dj', Icons.podcasts_rounded, t('Radio de voz', 'Voice radio'), const Color(0xfffc3c44)),
       ('canvas', Icons.movie_outlined, t('Apple Music, Spotify y portadas animadas', 'Apple Music, Spotify and animated covers'), const Color(0xffb0a0ff)),
       ('advanced', Icons.tune_rounded, t('Funciones beta y herramientas', 'Beta features and tools'), const Color(0xffb0a0ff)),
     ];
@@ -1233,18 +1233,18 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
     if (!_ready) {
       return const Padding(
         padding: EdgeInsets.all(16),
-        child: Center(child: CircularProgressIndicator(color: Color(0xff5CE1C5))),
+        child: Center(child: CircularProgressIndicator(color: Color(0xfffc3c44))),
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SwitchListTile(
-          title: const Text('Activar DJ de voz', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Clips al pausar, saltar, shuffle…',
+          title: const Text('Activar voz de radio', style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Clips al pausar, saltar, aleatorio…',
               style: TextStyle(color: Colors.white54, fontSize: 12)),
           value: _enabled,
-          activeColor: const Color(0xff5CE1C5),
+          activeColor: const Color(0xfffc3c44),
           onChanged: (v) async {
             await DjService.instance.setEnabled(v);
             setState(() => _enabled = v);
@@ -1252,13 +1252,13 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
         ),
         const Padding(
           padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Text('Dónde mostrar MAI Radio',
+          child: Text('Dónde mostrar Radio',
               style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600)),
         ),
         RadioListTile<String>(
           value: 'none',
           groupValue: _placement,
-          activeColor: const Color(0xff5CE1C5),
+          activeColor: const Color(0xfffc3c44),
           title: const Text('Solo desde Ajustes', style: TextStyle(color: Colors.white)),
           subtitle: const Text('Abrir con el botón de abajo', style: TextStyle(color: Colors.white54, fontSize: 12)),
           onChanged: (v) async {
@@ -1270,7 +1270,7 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
         RadioListTile<String>(
           value: 'home',
           groupValue: _placement,
-          activeColor: const Color(0xff5CE1C5),
+          activeColor: const Color(0xfffc3c44),
           title: const Text('Como tarjeta en Home', style: TextStyle(color: Colors.white)),
           subtitle: const Text('Aparece como una “canción” / atajo', style: TextStyle(color: Colors.white54, fontSize: 12)),
           onChanged: (v) async {
@@ -1282,9 +1282,9 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
         RadioListTile<String>(
           value: 'nav',
           groupValue: _placement,
-          activeColor: const Color(0xff5CE1C5),
+          activeColor: const Color(0xfffc3c44),
           title: const Text('En el nav inferior', style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Sustituye un slot (requiere rebuild de nav)', style: TextStyle(color: Colors.white54, fontSize: 12)),
+          subtitle: const Text('Añade Radio en la barra inferior', style: TextStyle(color: Colors.white54, fontSize: 12)),
           onChanged: (v) async {
             if (v == null) return;
             await DjService.instance.setPlacement(v);
@@ -1299,7 +1299,7 @@ class _DjSettingsPanelState extends State<_DjSettingsPanel> {
           ..._djs.map((id) => RadioListTile<String>(
                 value: id,
                 groupValue: _active,
-                activeColor: const Color(0xff5CE1C5),
+                activeColor: const Color(0xfffc3c44),
                 title: Text(id.replaceAll('_', ' '),
                     style: const TextStyle(color: Colors.white)),
                 onChanged: (v) async {
