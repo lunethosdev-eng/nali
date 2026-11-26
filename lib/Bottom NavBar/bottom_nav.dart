@@ -36,24 +36,59 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
   late AnimationController _bubbleCtrl;
   late Animation<double> _bubbleScale;
 
-  final List<Widget> _pages = [
-    HomePage(),
-    BrowsePage(),
-    LibraryPage(),
-    SearchPage(),
-  ];
+  List<Widget> get _pages {
+    final base = <Widget>[
+      HomePage(),
+      BrowsePage(),
+      LibraryPage(),
+      SearchPage(),
+    ];
+    if (DjService.instance.placement == 'nav') {
+      // Insert Radio before Search
+      return [
+        base[0],
+        base[1],
+        base[2],
+        const DjPlayerPage(),
+        base[3],
+      ];
+    }
+    return base;
+  }
 
-  final List<IconData> _icons = [
-    Icons.home_filled,
-    Icons.grid_view_rounded,
-    Icons.subscriptions_rounded,
-    Icons.search,
-  ];
+  List<String> get _dynamicLabels {
+    final base = ['Home', 'Browse', 'Library', 'Search'];
+    if (DjService.instance.placement == 'nav') {
+      return ['Home', 'Browse', 'Library', 'Radio', 'Search'];
+    }
+    return base;
+  }
 
-  final List<String> _labels = ['Home', 'Browse', 'Library', 'Search'];
+  List<IconData> get _dynamicIcons {
+    final base = [
+      Icons.home_rounded,
+      Icons.grid_view_rounded,
+      Icons.library_music_rounded,
+      Icons.search_rounded,
+    ];
+    if (DjService.instance.placement == 'nav') {
+      return [
+        Icons.home_rounded,
+        Icons.grid_view_rounded,
+        Icons.library_music_rounded,
+        Icons.radio_rounded,
+        Icons.search_rounded,
+      ];
+    }
+    return base;
+  }
+
+  // icons via _dynamicIcons
+
+  // labels via _dynamicLabels
 
   static const _collapsedMain = [0, 2]; // Home, Library
-  static const _searchIdx = 3;
+  int get _searchIdx => DjService.instance.placement == 'nav' ? 4 : 3;
 
   @override
   void initState() {
@@ -179,7 +214,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _icons[i],
+              _dynamicIcons[i],
               size: hovering ? 26 : (compact ? 22 : 24),
               color: active
                   ? const Color(0xfffc3c44)
@@ -188,7 +223,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
             if (showLabel) ...[
               const SizedBox(height: 2),
               Text(
-                _labels[i],
+                _dynamicLabels[i],
                 style: TextStyle(
                   fontSize: compact ? 9 : 10,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
@@ -217,10 +252,10 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             child: Row(children: [
-              Icon(_icons[index], size: 20,
+              Icon(_dynamicIcons[index], size: 20,
                   color: selected ? const Color(0xfffc3c44) : Colors.white70),
               const SizedBox(width: 13),
-              Text(_labels[index], style: TextStyle(
+              Text(_dynamicLabels[index], style: TextStyle(
                 color: selected ? Colors.white : Colors.white70,
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
@@ -526,7 +561,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
                                     height: 64,
                                     child: Center(
                                       child: Icon(
-                                        _icons[_hoverIndex!],
+                                        _dynamicIcons[_hoverIndex!],
                                         size: 28,
                                         color: const Color(0xfffc3c44),
                                       ),
