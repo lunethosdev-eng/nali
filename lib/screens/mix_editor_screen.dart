@@ -38,6 +38,8 @@ class _MixEditorScreenState extends State<MixEditorScreen> {
   String _stemModeB = 'full';
   double _muteFrom = 0;
   double _muteTo = 30;
+  /// crossfade | dual (both play at once)
+  String _mixMode = 'crossfade';
 
   String t(String es, String en) =>
       SettingsService.instance.locale == 'en' ? en : es;
@@ -92,6 +94,20 @@ class _MixEditorScreenState extends State<MixEditorScreen> {
 
   void _tickCrossfade(Duration posA) {
     if (!_playing || trackB == null) return;
+    if (_mixMode == 'dual') {
+      // Both tracks audible; balance by offsets
+      _playerA.setVolume(0.85);
+      _playerB.setVolume(0.85);
+      if (!_bStarted) {
+        _bStarted = true;
+        final url =
+            (trackB!['audio_url'] ?? trackB!['stream_url'] ?? '').toString();
+        if (url.isNotEmpty) {
+          _playerB.play(UrlSource(url));
+        }
+      }
+      return;
+    }
     final startMs = (_cutSec * 1000).round();
     final fadeMs = (_xfadeSec * 1000).round().clamp(300, 30000);
     if (posA.inMilliseconds < startMs) {
@@ -621,6 +637,36 @@ class _MixEditorScreenState extends State<MixEditorScreen> {
               },
             ),
             ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            t('Modo de mezcla', 'Mix mode'),
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: Text(t('Crossfade', 'Crossfade')),
+                selected: _mixMode == 'crossfade',
+                selectedColor: const Color(0xfffc3c44),
+                labelStyle: TextStyle(
+                    color: _mixMode == 'crossfade' ? Colors.white : Colors.white70),
+                backgroundColor: Colors.white10,
+                onSelected: (_) => setState(() => _mixMode = 'crossfade'),
+              ),
+              ChoiceChip(
+                label: Text(t('Ambas a la vez', 'Both at once')),
+                selected: _mixMode == 'dual',
+                selectedColor: const Color(0xfffc3c44),
+                labelStyle: TextStyle(
+                    color: _mixMode == 'dual' ? Colors.white : Colors.white70),
+                backgroundColor: Colors.white10,
+                onSelected: (_) => setState(() => _mixMode = 'dual'),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Text(
