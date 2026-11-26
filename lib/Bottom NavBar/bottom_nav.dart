@@ -100,7 +100,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
         CurvedAnimation(parent: _bubbleCtrl, curve: Curves.easeOutBack);
     _collapseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 380),
+      duration: const Duration(milliseconds: 480),
     );
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       HeadphoneService.instance.start();
@@ -195,8 +195,9 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
   }
 
   int _indexFromX(double x, double width) {
-    final itemW = width / 5;
-    return (x / itemW).floor().clamp(0, 4);
+    final n = _dynamicLabels.length.clamp(1, 8);
+    final itemW = width / n;
+    return (x / itemW).floor().clamp(0, n - 1);
   }
 
   Widget _navItem(int i, {bool compact = false, bool showLabel = true}) {
@@ -214,7 +215,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _dynamicIcons[i],
+              _dynamicIcons[i.clamp(0, _dynamicIcons.length - 1)],
               size: hovering ? 26 : (compact ? 22 : 24),
               color: active
                   ? const Color(0xfffc3c44)
@@ -223,7 +224,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
             if (showLabel) ...[
               const SizedBox(height: 2),
               Text(
-                _dynamicLabels[i],
+                _dynamicLabels[i.clamp(0, _dynamicLabels.length - 1)],
                 style: TextStyle(
                   fontSize: compact ? 9 : 10,
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
@@ -396,7 +397,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
             child: AnimatedBuilder(
               animation: _collapseCtrl,
               builder: (context, _) {
-                final t = Curves.easeInOutCubic.transform(_collapseCtrl.value);
+                final t = Curves.easeOutCubic.transform(_collapseCtrl.value);
                 return LayoutBuilder(
                   builder: (context, constraints) {
                     final fullW = constraints.maxWidth;
@@ -470,7 +471,7 @@ class _FirstPageState extends State<FirstPage> with TickerProviderStateMixin {
                                                     showLabel: showLabels),
                                             ]
                                           : List.generate(
-                                              5,
+                                              _dynamicLabels.length,
                                               (i) => _navItem(i,
                                                   showLabel: showLabels),
                                             ),
