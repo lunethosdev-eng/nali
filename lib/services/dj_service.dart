@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,7 @@ class DjService {
   static const _prefBalance = 'dj_music_balance';
   static const _prefPlacement = 'dj_placement'; // none | home | nav
   static const _prefBlobColor = 'dj_blob_color';
+  static const _prefXfade = 'dj_voice_xfade'; // seconds
 
   static const eventWelcome = 'welcome';
   static const eventPause = 'pause';
@@ -36,6 +38,9 @@ class DjService {
   bool _playingVoice = false;
   String _placement = 'none'; // none | home | nav
   int _blobColor = 0xFF5CE1C5;
+  double _voiceXfade = 3.5;
+  final _completeCtrl = StreamController<String>.broadcast();
+  Stream<String> get onVoiceComplete => _completeCtrl.stream;
 
   final Map<String, Map<String, List<String>>> _catalog = {};
 
@@ -65,6 +70,7 @@ class DjService {
     _balance = prefs.getDouble(_prefBalance) ?? 0.5;
     _placement = prefs.getString(_prefPlacement) ?? 'none';
     _blobColor = prefs.getInt(_prefBlobColor) ?? 0xFF5CE1C5;
+    _voiceXfade = prefs.getDouble(_prefXfade) ?? 3.5;
     try {
       await _voice.setReleaseMode(ReleaseMode.stop);
       await _voice.setPlayerMode(PlayerMode.mediaPlayer);
@@ -108,6 +114,18 @@ class DjService {
   }
 
   void setGenreFocus(bool v) => _genreFocus = v;
+
+  Future<void> setVoiceXfade(double sec) async {
+    _voiceXfade = sec.clamp(1.5, 8.0);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_prefXfade, _voiceXfade);
+  }
+
+  Future<void> setVoiceVolume(double v) async {
+    try {
+      await _voice.setVolume(v.clamp(0.0, 1.0));
+    } catch (_) {}
+  }
 
   /// Bundled fallback when AssetManifest is empty (web/hot-reload edge cases).
   static const Map<String, List<String>> _fallback = {
@@ -218,29 +236,41 @@ class DjService {
     final path = _randomClip(event);
     if (path == null) {
       debugPrint('DjService: no clips for $event');
+      // still signal so UI can start music
+      _playingVoice = false;
+      _completeCtrl.add(event);
       return;
     }
     try {
       _playingVoice = true;
       await _voice.stop();
-      // path is already relative to assets/ (e.g. dj/nugget_dj/welcome/…)
+      await _voice.setVolume(1.0);
       final relative =
           path.startsWith('assets/') ? path.substring(7) : path;
       debugPrint('DjService playing AssetSource($relative)');
       await _voice.play(AssetSource(relative));
+      // When complete → notify listeners (DJ page starts song crossfade)
       _voice.onPlayerComplete.first.then((_) {
         _playingVoice = false;
+        if (!_completeCtrl.isClosed) _completeCtrl.add(event);
       });
     } catch (e) {
       _playingVoice = false;
       debugPrint('DjService play $event ERROR: $e');
-      // Retry alternate path form
       try {
-        final alt = path.startsWith('dj/') ? path : 'dj/$_activeId/$event/${path.split('/').last}';
+        final alt = path.startsWith('dj/')
+            ? path
+            : 'dj/$_activeId/$event/${path.split('/').last}';
         await _voice.play(AssetSource(alt));
         _playingVoice = true;
+        _voice.onPlayerComplete.first.then((_) {
+          _playingVoice = false;
+          if (!_completeCtrl.isClosed) _completeCtrl.add(event);
+        });
       } catch (e2) {
         debugPrint('DjService retry failed: $e2');
+        _playingVoice = false;
+        if (!_completeCtrl.isClosed) _completeCtrl.add(event);
       }
     }
   }
