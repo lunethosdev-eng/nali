@@ -51,6 +51,7 @@ class DjService {
   bool get isSpeaking => _playingVoice;
   String get placement => _placement;
   int get blobColor => _blobColor;
+  double get voiceXfade => _voiceXfade;
   List<String> get availableDjs => _catalog.keys.toList()..sort();
 
   Map<String, dynamic> get djIdentity => {
