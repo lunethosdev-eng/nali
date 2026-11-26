@@ -2,9 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:nali/services/settings_service.dart';
 
-/// Liquid Glass effect inspired by Apple's iOS 26 Liquid Glass design system.
-/// Uses high-quality BackdropFilter blur, subtle specular highlights,
-/// soft borders and translucent fills to achieve a fluid, glass-like appearance.
+/// Apple-style Liquid Glass. Chromatic light lives *inside* the material
+/// (gradient / inner glow), never as an outer outline stroke.
 class LiquidGlass extends StatelessWidget {
   final Widget child;
   final double blur;
@@ -38,24 +37,36 @@ class LiquidGlass extends StatelessWidget {
     final targetRadius = borderRadius ?? BorderRadius.circular(20);
     return TweenAnimationBuilder<BorderRadius?>(
       tween: BorderRadiusTween(end: targetRadius),
-      duration: s.effectiveReduceAnimations ? Duration.zero : const Duration(milliseconds: 460),
-      curve: Curves.easeInOutCubic,
-      builder: (context, radius, _) => _buildGlass(context, s, enabled, radius ?? targetRadius),
+      duration: s.effectiveReduceAnimations
+          ? Duration.zero
+          : const Duration(milliseconds: 420),
+      curve: const Cubic(0.22, 1.0, 0.36, 1.0),
+      builder: (context, radius, _) =>
+          _buildGlass(context, s, enabled, radius ?? targetRadius),
     );
   }
 
-  Widget _buildGlass(BuildContext context, SettingsService s, bool enabled, BorderRadius radius) {
+  Widget _buildGlass(
+    BuildContext context,
+    SettingsService s,
+    bool enabled,
+    BorderRadius radius,
+  ) {
     final tint = tintColor ?? Colors.white;
     final effectiveBlur = enabled
         ? (s.flag('ui_blur_heavy', def: false)
-            ? s.effectiveGlassBlur * 1.4
-            : s.effectiveGlassBlur).clamp(0.0, 48.0).toDouble()
+                ? s.effectiveGlassBlur * 1.4
+                : s.effectiveGlassBlur)
+            .clamp(0.0, 48.0)
+            .toDouble()
         : 0.0;
     final effectiveOpacity = enabled
         ? s.glassOpacity.clamp(0.02, 0.5).toDouble()
         : opacity * 0.35;
-    final specularOn = enabled && s.allowExpensiveEffects &&
-        enableSpecular && s.flag('ui_specular', def: true);
+    final specularOn = enabled &&
+        s.allowExpensiveEffects &&
+        enableSpecular &&
+        s.flag('ui_specular', def: true);
 
     if (!enabled) {
       return Container(
@@ -70,57 +81,73 @@ class LiquidGlass extends StatelessWidget {
       );
     }
 
+    // Inner material: soft multi-stop gradient simulates light bending
+    // *through* the glass (cyan→clear→magenta bias), not an outer rim.
     final glassSurface = Container(
       padding: padding,
       decoration: BoxDecoration(
         borderRadius: radius,
-        color: tint.withOpacity(effectiveOpacity),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            tint.withOpacity(effectiveOpacity * 1.4),
-            tint.withOpacity(effectiveOpacity * 0.6),
-            tint.withOpacity(effectiveOpacity * 0.9),
+            const Color(0x22A8E8FF), // inner cyan tint
+            tint.withOpacity(effectiveOpacity),
+            const Color(0x18FF8AB8), // inner magenta tint
+            tint.withOpacity(effectiveOpacity * 0.85),
           ],
-          stops: const [0.0, 0.5, 1.0],
+          stops: const [0.0, 0.28, 0.72, 1.0],
         ),
         border: Border.all(
-          color: Colors.white.withOpacity(0.18),
+          // Neutral soft edge only — no RGB outline
+          color: Colors.white.withOpacity(0.14),
           width: borderWidth,
         ),
       ),
       child: Stack(
+        fit: StackFit.passthrough,
         children: [
           if (specularOn)
             Positioned(
               top: 0,
               left: 0,
               right: 0,
-              height: 1.5,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.only(
-                    topLeft: radius.topLeft,
-                    topRight: radius.topRight,
-                  ),
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withOpacity(0.0),
-                      Colors.white.withOpacity(0.45),
-                      Colors.white.withOpacity(0.0),
-                    ],
-                    stops: const [0.1, 0.5, 0.9],
+              height: 1.2,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.only(
+                      topLeft: radius.topLeft,
+                      topRight: radius.topRight,
+                    ),
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.white.withOpacity(0.0),
+                        Colors.white.withOpacity(0.35),
+                        Colors.white.withOpacity(0.0),
+                      ],
+                      stops: const [0.12, 0.5, 0.88],
+                    ),
                   ),
                 ),
               ),
             ),
-          // Chromatic refraction rim (liquid light fringe)
-          if (enabled)
+          // Soft inner highlight (light catching inside the glass body)
+          if (specularOn)
             Positioned.fill(
               child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _RefractionRimPainter(radius: radius),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: radius,
+                    gradient: RadialGradient(
+                      center: const Alignment(-0.55, -0.7),
+                      radius: 1.1,
+                      colors: [
+                        Colors.white.withOpacity(0.12),
+                        Colors.white.withOpacity(0.0),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -136,7 +163,7 @@ class LiquidGlass extends StatelessWidget {
         boxShadow: elevation > 0
             ? [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.25),
+                  color: Colors.black.withOpacity(0.22),
                   blurRadius: elevation * 2,
                   offset: Offset(0, elevation / 2),
                 ),
@@ -159,7 +186,6 @@ class LiquidGlass extends StatelessWidget {
   }
 }
 
-/// Convenience wrapper for AppBar-style liquid glass bars
 class LiquidGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Widget? title;
   final List<Widget>? actions;
@@ -175,7 +201,8 @@ class LiquidGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => Size.fromHeight(height + (bottom?.preferredSize.height ?? 0));
+  Size get preferredSize =>
+      Size.fromHeight(height + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
@@ -209,56 +236,4 @@ class LiquidGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
     );
   }
-}
-
-
-/// Soft RGB fringe along the glass edge — light bending through liquid.
-
-/// Soft chromatic fringe painted INSIDE the glass edge (not outside outline).
-class _RefractionRimPainter extends CustomPainter {
-  _RefractionRimPainter({required this.radius});
-  final BorderRadius radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (size.width <= 0 || size.height <= 0) return;
-    final rrect = radius.toRRect(Offset.zero & size);
-
-    // Inner inset so the fringe sits inside the pill, not as outer stroke.
-    final inner = rrect.deflate(1.2);
-
-    // Magenta/red fringe along top-left inner edge
-    final magenta = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.15
-      ..color = const Color(0x33FF4D8D)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.8);
-    canvas.drawRRect(inner.inflate(0.3), magenta);
-
-    // Cyan fringe shifted slightly (chromatic split)
-    final cyan = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0
-      ..color = const Color(0x2840E8FF)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 0.7);
-    canvas.drawRRect(inner.deflate(0.4), cyan);
-
-    // Soft white specular inside top
-    final gloss = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.centerRight,
-        colors: [
-          Colors.white.withOpacity(0.28),
-          Colors.white.withOpacity(0.0),
-        ],
-      ).createShader(Offset.zero & size)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    canvas.drawRRect(inner, gloss);
-  }
-
-  @override
-  bool shouldRepaint(covariant _RefractionRimPainter old) =>
-      old.radius != radius;
 }
